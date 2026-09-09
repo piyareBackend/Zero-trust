@@ -10,18 +10,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: JavaScript syntax
-        run: node --check app.js
+        run: |
+          node --check app.js
+          node --check tool-engine.js
+          node --check engines/free/core.js
+          node --check engines/free/pdf.js
+          node --check engines/free/image.js
+          node --check engines/free/qr.js
+          node --check engines/free/utility.js
       - name: Required foundation files
-        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml
+        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml && test -f _headers
+      - name: Lazy engine boundary
+        run: |
+          test -f engines/paid/README.md
+          ! grep -R "engines/paid" engines/free tool-engine.js
+          ! grep -R "api\.domain\.com" . --exclude-dir=.git
       - name: MVP routes
         run: |
-          test -f tools/pdf-merger/index.html
-          test -f tools/pdf-compressor/index.html
-          test -f tools/pdf-to-jpg/index.html
-          test -f tools/jpg-to-pdf/index.html
-          test -f tools/pdf-splitter/index.html
-          test -f tools/image-compressor/index.html
-          test -f tools/image-resizer/index.html
-          test -f tools/image-cropper/index.html
-          test -f tools/qr-generator/index.html
-          test -f tools/qr-scanner/index.html
+          for p in pdf-merger pdf-compressor pdf-to-jpg jpg-to-pdf pdf-splitter image-compressor image-resizer image-cropper qr-generator qr-scanner password-generator json-formatter base64 hash-generator uuid-generator; do test -f "tools/$p/index.html"; done
