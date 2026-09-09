@@ -42,7 +42,8 @@ jobs:
           grep -q "wifi-qr-generator" tool-engine.js
       - name: Browser smoke test all registered routes
         run: |
-          npx --yes playwright@1.55.0 install --with-deps chromium
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright@1.55.0 install --with-deps chromium
           python3 -m http.server 4173 --directory .. >/tmp/zt-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
