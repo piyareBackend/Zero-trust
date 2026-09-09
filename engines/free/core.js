@@ -1,0 +1,11 @@
+export const BASE='/Zero-trust/';
+export const $=s=>document.querySelector(s);
+export const bytes=n=>{if(!Number.isFinite(n))return'—';if(n<1024)return`${n} B`;let x=n/1024,u=['KB','MB','GB'],i=0;while(x>=1024&&i<2){x/=1024;i++}return`${x.toFixed(x>=100?0:x>=10?1:2)} ${u[i]}`};
+export const esc=s=>String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+export const download=(blob,name)=>{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500)};
+export function picker(accept='*/*',multiple=false){return`<div class="upload-zone" id="uploadZone"><div class="upload-icon">↑</div><strong>Drop files here</strong><span>or tap to browse</span><small>${multiple?'Multiple files supported':'One file'} · Files stay on this device</small><input id="file" type="file" accept="${accept}" ${multiple?'multiple':''}></div><div id="fileList" class="file-list"></div>`}
+export function bindFiles(cb){const input=$('#file'),zone=$('#uploadZone'),list=$('#fileList');let files=[];const render=()=>{list.innerHTML=files.map((f,i)=>`<div class="file-row"><div><strong>${esc(f.name)}</strong><small>${bytes(f.size)} · ${esc(f.type||'file')}</small></div><button class="icon-btn" data-i="${i}" type="button" aria-label="Remove ${esc(f.name)}">×</button></div>`).join('');cb(files)};const add=arr=>{files.push(...arr);render()};input.onchange=()=>add([...input.files]);zone.ondragover=e=>{e.preventDefault();zone.classList.add('dragging')};zone.ondragleave=()=>zone.classList.remove('dragging');zone.ondrop=e=>{e.preventDefault();zone.classList.remove('dragging');add([...e.dataTransfer.files])};list.onclick=e=>{const b=e.target.closest('[data-i]');if(b){files.splice(+b.dataset.i,1);render()}};return()=>files}
+export const shell=(body)=>{const app=$('#toolApp');app.innerHTML=body;return app};
+export const status=(s,k='info')=>{const e=$('#out');if(e){e.textContent=s;e.dataset.status=k}};
+export const progress=(show,msg,p=0)=>{const w=$('#progressWrap');if(!w)return;w.hidden=!show;$('#progressBar').style.width=`${p*100}%`;$('#progressText').textContent=msg};
+export const reset=()=>{const i=$('#file');if(i)i.value='';const l=$('#fileList');if(l)l.innerHTML=''};
