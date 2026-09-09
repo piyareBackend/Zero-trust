@@ -18,6 +18,7 @@ jobs:
           node --check engines/free/image.js
           node --check engines/free/qr.js
           node --check engines/free/utility.js
+          node --check engines/free/security.js
       - name: Required foundation files
         run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml && test -f _headers
       - name: Lazy engine boundary
@@ -25,6 +26,6 @@ jobs:
           test -f engines/paid/README.md
           ! grep -R "engines/paid" engines/free tool-engine.js
           ! grep -R "api\.domain\.com" . --exclude-dir=.git
-      - name: MVP routes
+      - name: Tool routes
         run: |
-          for p in pdf-merger pdf-compressor pdf-to-jpg jpg-to-pdf pdf-splitter image-compressor image-resizer image-cropper qr-generator qr-scanner password-generator json-formatter base64 hash-generator uuid-generator; do test -f "tools/$p/index.html"; done
+          for p in pdf-merger pdf-compressor pdf-to-jpg jpg-to-pdf pdf-splitter image-compressor image-resizer image-cropper exif-remover qr-generator qr-scanner password-generator hash-generator uuid-generator text-encryption file-encryption json-formatter base64; do test -f "tools/$p/index.html"; done
