@@ -19,13 +19,21 @@ jobs:
           node --check engines/free/qr.js
           node --check engines/free/utility.js
           node --check engines/free/security.js
+          node --check engines/free/generic.js
       - name: Required foundation files
-        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml && test -f _headers
+        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml && test -f _headers && test -f 404.html
       - name: Lazy engine boundary
         run: |
           test -f engines/paid/README.md
           ! grep -R "engines/paid" engines/free tool-engine.js
           ! grep -R "api\.domain\.com" . --exclude-dir=.git
-      - name: Tool routes
+      - name: First 100 tool registry
         run: |
-          for p in pdf-merger pdf-compressor pdf-to-jpg jpg-to-pdf pdf-splitter image-compressor image-resizer image-cropper exif-remover qr-generator qr-scanner password-generator hash-generator uuid-generator text-encryption file-encryption json-formatter base64; do test -f "tools/$p/index.html"; done
+          count=$(grep -o "\['[a-z0-9-]*','[^']*','[^']*'\]" app.js | wc -l)
+          test "$count" -ge 100
+      - name: Tool engines
+        run: |
+          test -f engines/free/generic.js
+          test -f engines/free/security.js
+          grep -q "pdf-compressor" tool-engine.js
+          grep -q "generic.js" tool-engine.js
