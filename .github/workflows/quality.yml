@@ -1,0 +1,27 @@
+name: Zero Trust Quality
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JavaScript syntax
+        run: node --check app.js
+      - name: Required foundation files
+        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml
+      - name: MVP routes
+        run: |
+          test -f tools/pdf-merger/index.html
+          test -f tools/pdf-compressor/index.html
+          test -f tools/pdf-to-jpg/index.html
+          test -f tools/jpg-to-pdf/index.html
+          test -f tools/pdf-splitter/index.html
+          test -f tools/image-compressor/index.html
+          test -f tools/image-resizer/index.html
+          test -f tools/image-cropper/index.html
+          test -f tools/qr-generator/index.html
+          test -f tools/qr-scanner/index.html
