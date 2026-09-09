@@ -31,9 +31,19 @@ jobs:
         run: |
           count=$(grep -o "\['[a-z0-9-]*','[^']*','[^']*'\]" app.js | wc -l)
           test "$count" -ge 100
-      - name: Tool engines
+      - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
           test -f engines/free/security.js
-          grep -q "pdf-compressor" tool-engine.js
-          grep -q "generic.js" tool-engine.js
+          test -f engines/free/utility.js
+          test -f engines/free/qr.js
+          grep -q "secure-random-generator" tool-engine.js
+          grep -q "base64-decoder" tool-engine.js
+          grep -q "wifi-qr-generator" tool-engine.js
+      - name: Browser smoke test all registered routes
+        run: |
+          npx --yes playwright@1.55.0 install --with-deps chromium
+          python3 -m http.server 4173 --directory .. >/tmp/zt-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/smoke.mjs

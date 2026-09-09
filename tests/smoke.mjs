@@ -1,0 +1,31 @@
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+const app=fs.readFileSync('app.js','utf8');
+const routes=[...app.matchAll(/\['([a-z0-9-]+)','[^']*','[^']*'\]/g)].map(m=>m[1]);
+if(routes.length<100)throw new Error(`Expected 100 routes, found ${routes.length}`);
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage();
+const failures=[];
+page.on('pageerror',e=>failures.push(`pageerror: ${e.message}`));
+for(const slug of routes){
+  failures.length=0;
+  await page.goto(`http://127.0.0.1:4173/Zero-trust/tools/${slug}/`,{waitUntil:'domcontentloaded',timeout:30000});
+  await page.waitForFunction(()=>document.querySelector('#toolApp .tool-box')||document.querySelector('#toolApp .output[data-status="error"]'),null,{timeout:15000});
+  const result=await page.evaluate(()=>({box:!!document.querySelector('#toolApp .tool-box'),error:document.querySelector('#toolApp .output[data-status="error"]')?.textContent||'',title:document.title}));
+  if(!result.box||result.error)failures.push(`${slug}: engine did not mount (${result.error||'missing .tool-box'})`);
+  if(failures.length)throw new Error(failures.join('\n'));
+}
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/password-generator/',{waitUntil:'networkidle',timeout:30000});
+await page.locator('#run').click();
+if(!(await page.locator('#outText').inputValue()))throw new Error('Password generator action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/json-formatter/',{waitUntil:'networkidle',timeout:30000});
+await page.locator('#input').fill('{"a":1}');await page.locator('#format').click();
+if(!(await page.locator('#out').textContent()).includes('"a": 1'))throw new Error('JSON formatter action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/base64-decoder/',{waitUntil:'networkidle',timeout:30000});
+await page.locator('#input').fill('SGVsbG8=');await page.locator('#decode').click();
+if((await page.locator('#out').textContent()).trim()!=='Hello')throw new Error('Base64 decoder action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/secure-random-generator/',{waitUntil:'networkidle',timeout:30000});
+await page.locator('#run').click();
+if(!(await page.locator('#outText').inputValue()).length)throw new Error('Secure random generator action failed');
+await browser.close();
+console.log(`Browser smoke passed: ${routes.length} registered tool routes + action checks`);
