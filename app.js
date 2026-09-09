@@ -1,0 +1,6 @@
+const BASE='/Zero-trust/';
+const TOOLS=[['pdf-merger','PDF Merger','pdf'],['pdf-compressor','PDF Compressor','pdf'],['pdf-to-jpg','PDF to JPG','pdf'],['jpg-to-pdf','JPG to PDF','pdf'],['pdf-splitter','PDF Splitter','pdf'],['image-compressor','Image Compressor','image'],['image-resizer','Image Resizer','image'],['image-cropper','Image Cropper','image'],['qr-generator','QR Code Generator','qr'],['qr-scanner','QR Code Scanner','qr']];
+const esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+const card=t=>`<a class="tool-card" href="${BASE}tools/${t[0]}/"><span class="eyebrow">${t[2]}</span><h3>${esc(t[1])}</h3><p>Private browser-based utility.</p></a>`;
+function boot(){const f=document.querySelector('#featured'),a=document.querySelector('#allTools');if(f)f.innerHTML=TOOLS.map(card).join('');if(a){const q=document.querySelector('#toolSearch'),draw=()=>{const s=(q?.value||'').toLowerCase();a.innerHTML=TOOLS.filter(t=>t.join(' ').toLowerCase().includes(s)).map(card).join('')};q?.addEventListener('input',draw);draw()}const st=document.querySelector('#localStatus');if(st)st.textContent=location.protocol==='https:'?'Local processing available':'Use HTTPS for browser security.'}
+document.addEventListener('DOMContentLoaded',boot);
