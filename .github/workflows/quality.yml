@@ -44,7 +44,18 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright@1.55.0 install --with-deps chromium
-          python3 -m http.server 4173 --directory .. >/tmp/zt-server.log 2>&1 &
+          cat > /tmp/zt-server.py <<'PY'
+          from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+          from pathlib import Path
+          class Handler(SimpleHTTPRequestHandler):
+              def send_head(self):
+                  path = self.translate_path(self.path)
+                  if not Path(path).is_file():
+                      self.path = '/Zero-trust/404.html'
+                  return super().send_head()
+          ThreadingHTTPServer(('127.0.0.1', 4173), Handler).serve_forever()
+          PY
+          (cd .. && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/smoke.mjs
