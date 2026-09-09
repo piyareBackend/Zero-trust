@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://piyarebackend.github.io/Zero-trust/sitemap.xml
