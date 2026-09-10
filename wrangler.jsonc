@@ -4,5 +4,15 @@
   "main": "api/main.mjs",
   "compatibility_date": "2026-09-08",
   "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "404-page" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zero-trust-production",
+      "database_id": "0e7fad6a-a882-4a7f-bd23-2ba72703eda0"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "996829503255-uf6iikvl9ev3ss2vbdn0b05icdfgjeki.apps.googleusercontent.com"
+  },
   "observability": { "enabled": true }
 }
