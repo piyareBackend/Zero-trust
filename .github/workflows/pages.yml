@@ -1,40 +1,36 @@
-name: Deploy Zero Trust
+name: Deploy Zero Trust to Cloudflare Pages
 on:
   push:
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
+  deployments: write
 concurrency:
-  group: pages
+  group: cloudflare-pages
   cancel-in-progress: true
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
       - name: Generate 500+ SEO tool pages
         run: node scripts/build-pages.mjs
       - name: Normalize physical tool bootstraps
         run: node scripts/normalize-pages.mjs
+      - name: Align runtime cache versions
+        run: sed -i 's/tool-engine\.js?v=203/tool-engine.js?v=207/g' app.js
       - name: Protect browser-delivered JavaScript
         run: |
           npx --yes terser@5.44.0 app.js -c -m -o app.js
           npx --yes terser@5.44.0 tool-engine.js -c -m -o tool-engine.js
           for f in engines/free/*.js; do npx --yes terser@5.44.0 "$f" -c -m -o "$f"; done
           find . -name '*.map' -delete
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
-          path: .
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name=zero-trust --branch=main --commit-message="${{ github.event.head_commit.message }}" --commit-hash=${{ github.sha }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
