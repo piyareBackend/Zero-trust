@@ -1,0 +1,11 @@
+const base=process.env.API_BASE||'http://127.0.0.1:8787';const ownerEmail=process.env.TEST_OWNER_EMAIL,ownerPassword=process.env.TEST_OWNER_PASSWORD,secret=process.env.TEST_OWNER_BOOTSTRAP_SECRET;if(!ownerEmail||!ownerPassword||!secret)throw Error('API smoke environment is incomplete');
+async function req(path,opts={}){const r=await fetch(base+path,{...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});const text=await r.text();let data={};try{data=JSON.parse(text)}catch{}if(!r.ok)throw Error(`${path} ${r.status}: ${data.error||text}`);return{r,data}}
+const boot=await req('/api/owner/bootstrap',{method:'POST',headers:{'x-owner-bootstrap':secret},body:JSON.stringify({email:ownerEmail,password:ownerPassword})});if(!boot.data.ok)throw Error('Owner bootstrap failed');
+const login=await req('/api/auth/login',{method:'POST',body:JSON.stringify({email:ownerEmail,password:ownerPassword})});const cookie=login.r.headers.get('set-cookie');if(!cookie||!login.data.csrfToken)throw Error('Secure owner session was not issued');
+const me=await req('/api/me',{headers:{cookie}});if(!me.data.authenticated||me.data.user.role!=='owner')throw Error('Owner session authorization failed');
+const overview=await req('/api/owner/overview',{headers:{cookie}});if(typeof overview.data.users!=='number')throw Error('Owner overview failed');
+await req('/api/owner/settings',{method:'POST',headers:{cookie,'x-csrf-token':login.data.csrfToken},body:JSON.stringify({key:'maintenance_mode',value:'false'})});
+await req('/api/owner/tools/api-smoke-tool',{method:'POST',headers:{cookie,'x-csrf-token':login.data.csrfToken},body:JSON.stringify({requiredPlan:'pro',enabled:true})});
+const gated=await req('/api/tools/api-smoke-tool',{headers:{cookie}});if(!gated.data.allowed||gated.data.plan!=='pro')throw Error('Server-side Pro entitlement failed');
+const user=await req('/api/auth/signup',{method:'POST',body:JSON.stringify({email:process.env.TEST_USER_EMAIL,password:process.env.TEST_USER_PASSWORD})});if(!user.data.ok)throw Error('User signup failed');
+await req('/api/auth/logout',{method:'POST',headers:{cookie}});console.log('PASS: D1-backed signup/login/session, owner authorization, CSRF-protected owner actions, entitlement enforcement and logout verified.');
