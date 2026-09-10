@@ -25,6 +25,7 @@ jobs:
       OWNER_BOOTSTRAP_SECRET: ${{ secrets.OWNER_BOOTSTRAP_SECRET }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,26 +48,22 @@ jobs:
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
           test -f dist/index.html; test -f dist/data/tools-index.json; test -f dist/login/index.html; test -f dist/signup/index.html; test -f dist/account/index.html; test -f dist/owner/index.html; test -f dist/pricing/index.html
           grep -q 'Quick tools' dist/index.html; grep -q 'hamburger' dist/index.html; grep -q 'Continue with Google' dist/login/index.html
-      - name: Prepare Cloudflare Worker + D1 config
+      - name: Prepare Cloudflare Worker + existing production D1
         if: env.CF_CONFIGURED == 'true'
         run: |
           set -euo pipefail
-          DB_ID="$(npx --yes wrangler@latest d1 list --json | node --input-type=module -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const a=JSON.parse(s);const r=a.find(x=>x.name==='zero-trust');process.stdout.write(r?.uuid||r?.database_id||'')})")"
-          if [ -z "$DB_ID" ]; then DB_ID="$(npx --yes wrangler@latest d1 create zero-trust --json | node --input-type=module -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);process.stdout.write(x.uuid||x.database_id||'')})")"; fi
-          test -n "$DB_ID"
-          cat > wrangler.deploy.jsonc <<EOF
-          {"$schema":"node_modules/wrangler/config-schema.json","name":"zero-trust","main":"api/main.mjs","compatibility_date":"2026-09-08","assets":{"directory":"./dist","binding":"ASSETS","not_found_handling":"404-page"},"d1_databases":[{"binding":"DB","database_name":"zero-trust","database_id":"$DB_ID"}],"observability":{"enabled":true}}
-          EOF
-          npx --yes wrangler@latest d1 execute zero-trust --remote --file=api/schema.sql --config=wrangler.deploy.jsonc
+          test -f wrangler.jsonc
+          npx --yes wrangler@latest d1 execute zero-trust-production --remote --file=api/schema.sql --config=wrangler.jsonc
       - name: Configure Cloudflare secrets
         if: env.CF_CONFIGURED == 'true'
         run: |
           set -euo pipefail
-          if [ -n "$OWNER_EMAIL" ] && [ -n "$OWNER_BOOTSTRAP_SECRET" ]; then printf '%s' "$OWNER_EMAIL" | npx --yes wrangler@latest secret put OWNER_EMAIL --config=wrangler.deploy.jsonc; printf '%s' "$OWNER_BOOTSTRAP_SECRET" | npx --yes wrangler@latest secret put OWNER_BOOTSTRAP_SECRET --config=wrangler.deploy.jsonc; fi
-          if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then printf '%s' "$GOOGLE_CLIENT_ID" | npx --yes wrangler@latest secret put GOOGLE_CLIENT_ID --config=wrangler.deploy.jsonc; printf '%s' "$GOOGLE_CLIENT_SECRET" | npx --yes wrangler@latest secret put GOOGLE_CLIENT_SECRET --config=wrangler.deploy.jsonc; fi
+          if [ -n "$OWNER_EMAIL" ] && [ -n "$OWNER_BOOTSTRAP_SECRET" ]; then printf '%s' "$OWNER_EMAIL" | npx --yes wrangler@latest secret put OWNER_EMAIL --config=wrangler.jsonc; printf '%s' "$OWNER_BOOTSTRAP_SECRET" | npx --yes wrangler@latest secret put OWNER_BOOTSTRAP_SECRET --config=wrangler.jsonc; fi
+          if [ -n "$GOOGLE_CLIENT_SECRET" ]; then printf '%s' "$GOOGLE_CLIENT_SECRET" | npx --yes wrangler@latest secret put GOOGLE_CLIENT_SECRET --config=wrangler.jsonc; fi
+          if [ -n "$RESEND_API_KEY" ]; then printf '%s' "$RESEND_API_KEY" | npx --yes wrangler@latest secret put RESEND_API_KEY --config=wrangler.jsonc; fi
       - name: Deploy Cloudflare Worker
         if: env.CF_CONFIGURED == 'true'
-        run: npx --yes wrangler@latest deploy --config=wrangler.deploy.jsonc
+        run: npx --yes wrangler@latest deploy --config=wrangler.jsonc
       - name: Configure GitHub Pages fallback
         if: env.CF_CONFIGURED != 'true'
         uses: actions/configure-pages@v5
