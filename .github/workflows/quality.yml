@@ -12,12 +12,14 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check app.js; node --check account.js; node --check tool-engine.js; node --check api/worker.mjs; node --check api/platform-router.mjs; node --check api/main.mjs
-          node --check scripts/build-pages.mjs; node --check scripts/build-cloudflare.mjs; node --check scripts/enhance-platform.mjs; node --check scripts/merge-legacy-pages.mjs
-          node --check tests/legacy-smoke.mjs; node --check tests/security-static.mjs; node --check tests/api-smoke.mjs
-          node --check engines/free/universal.js; node --check engines/free/extended.js; node --check engines/free/pdf-universal.js
+          node --check scripts/build-pages.mjs; node --check scripts/build-cloudflare.mjs; node --check scripts/enhance-platform.mjs; node --check scripts/merge-legacy-pages.mjs; node --check scripts/audit-tools.mjs
+          node --check tests/legacy-smoke.mjs; node --check tests/security-static.mjs; node --check tests/api-smoke.mjs; node --check tests/tool-regression.mjs
+          node --check engines/free/universal.js; node --check engines/free/extended.js; node --check engines/free/real-tools.js; node --check engines/free/document-converter.js; node --check engines/free/pdf-universal.js
           node --check data/catalog.mjs; node --check data/catalog-combined.mjs; node --check data/legacy-tools.mjs; node --check data/legacy-500-plus.mjs
       - name: Catalog integrity
-        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length<1009||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
+        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length!==1594||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
+      - name: Tool capability audit
+        run: node scripts/audit-tools.mjs
       - name: Build complete static site
         run: |
           rm -rf dist; OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
@@ -40,12 +42,14 @@ jobs:
           WORKER_PID=$!; trap 'kill $WORKER_PID 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then break; fi; if [ "$i" = 30 ]; then cat /tmp/zt-worker.log; exit 1; fi; sleep 1; done
           timeout 120s env API_BASE=http://127.0.0.1:8787 TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" node tests/api-smoke.mjs
-      - name: Browser smoke + privacy test
+      - name: Complete 1,594-tool action regression
         run: |
-          npm install --no-save --no-package-lock playwright@1.55.0; npx playwright@1.55.0 install --with-deps chromium
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright@1.55.0 install --with-deps chromium
           cat > /tmp/zt-server.py <<'PY'
           from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
           ThreadingHTTPServer(('127.0.0.1',4173),SimpleHTTPRequestHandler).serve_forever()
           PY
           (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) & SERVER_PID=$!; trap 'kill $SERVER_PID' EXIT
+          BASE_URL=http://127.0.0.1:4173 node tests/tool-regression.mjs
           SITE_ROOT=dist node tests/smoke.mjs; SITE_ROOT=dist node tests/legacy-smoke.mjs
