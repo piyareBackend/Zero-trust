@@ -1,0 +1,2 @@
+# Preserve GitHub Pages-style paths while serving the same site at the Cloudflare root.
+/Zero-trust/* /:splat 301
