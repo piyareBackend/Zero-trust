@@ -3,7 +3,7 @@ import fs from'node:fs';
 const app=fs.readFileSync('app.js','utf8');
 const routes=[...app.matchAll(/\['([a-z0-9-]+)','[^']*','[^']*'\]/g)].map(m=>m[1]);
 if(routes.length<200)throw new Error(`Expected 200+ routes, found ${routes.length}`);
-const browser=await chromium.launch({headless:true});const page=await browser.newPage();await page.setCacheEnabled(false);
+const browser=await chromium.launch({headless:true});const page=await browser.newPage();await page.route('**/tool-engine.js*',route=>route.continue({url:route.request().url().split('?')[0]+`?smoke=${Date.now()}-${Math.random()}`}));
 page.on('pageerror',e=>{throw e});
 for(const slug of routes){await page.goto(`http://127.0.0.1:4173/Zero-trust/tools/${slug}/`,{waitUntil:'domcontentloaded',timeout:30000});await page.waitForSelector('#toolApp .tool-box',{timeout:15000});const text=await page.locator('#toolApp').innerText();if(text.includes('could not load'))throw new Error(`Engine failed: ${slug}`);if(await page.locator('#relatedTools .tool-card').count()===0)throw new Error(`Related tools missing: ${slug}`)}
 await page.goto('http://127.0.0.1:4173/Zero-trust/tools/',{waitUntil:'domcontentloaded'});await page.locator('#toolSearch').fill('PDF');if(await page.locator('#allTools .tool-card').count()<100)throw new Error('PDF search did not expose 100+ PDF tools');await page.locator('#categoryFilter').selectOption('pdf');if(await page.locator('#allTools .tool-card').count()<100)throw new Error('PDF category filter did not expose 100+ PDF tools');
