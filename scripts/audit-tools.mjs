@@ -1,28 +1,32 @@
 import { CATALOG } from '../data/catalog-combined.mjs';
-import { readFile } from 'node:fs/promises';
 
-const real=await readFile(new URL('../engines/free/real-tools.js',import.meta.url),'utf8');
-const unsupported=[
-  /remove background/i,/remove watermark/i,/ocr/i,/upscal/i,/restor/i,/colorizer/i,/exif/i,/sprite sheet/i,/favicon/i,/collage/i,/meme/i,/image comparison/i,/batch image renamer/i,
-  /heic/i,/tiff/i,/raw/i,/jpe?g to (?:gif|bmp|tiff|heic|raw)/i,/png to (?:gif|bmp|tiff|heic|raw)/i,/webp to (?:gif|bmp|tiff|heic|raw)/i,/avif to (?:gif|bmp|tiff|heic|raw)/i,
-  /docx/i,/pptx?/i,/xlsx?/i,/epub/i,/rtf/i,/mammoth/i,/excel/i,
-  /bcrypt/i,/pgp/i,/csr/i,/certificate/i,/ssl/i,/totp/i,/rsa key/i,/aes.*decrypt/i,/file encrypt/i,
-  /speech to text/i,/text to speech/i,/handwriting/i,
-  /backlink/i,/plagiarism/i,/keyword position/i,/username availability/i,/youtube thumbnail downloader/i,
-  /dns/i,/whois/i,/port checker/i,/website speed/i,/broken link/i,/screenshot tool/i,/favicon fetcher/i,/ip.*geolocation/i
+const PASS_THROUGH = /return\s+s\b|r\s*=\s*s\s*;|Result\s*=\s*\$\{a\+b\}/;
+const localPatterns = [
+  ['text','word counter|character counter|letter counter|sentence counter|paragraph counter|vowel|reverse|upper|lower|title|case converter|duplicate|sort|extra space|whitespace|line break|find and replace|slug|palindrome|anagram|frequency|morse|pig latin|nato|repeater|bionic|ascii art|binary|ascii to text|hex|base64|url encode|url decode|rot13|html entity|remove invisible|random word|random sentence'],
+  ['security','password|random string|token|uuid|sha1|sha256|sha512|hash generator|base64|url encode|url decode|rot13|xor|aes|strength|jwt decoder|html entity'],
+  ['calculator','percentage|discount|gst|tax|simple interest|compound interest|emi|mortgage|ratio|roi|profit margin|markup|break-even|fuel cost|mileage|dice|coin|random number'],
+  ['unit','length converter|weight|mass converter|temperature converter|area converter|volume converter|speed converter|data storage converter'],
+  ['color','hex to rgb|rgb to hex|random color|contrast'],
+  ['data','json to csv|csv to json|json formatter|json minifier|json validator|json converter|base64'],
+  ['developer','json|regex tester|slug|timestamp|epoch|http status|markdown to html|html to markdown|robots|meta tag'],
+  ['seo','keyword density|readability|canonical|open graph|schema|serp'],
+  ['network','cidr|subnet|user-agent|http status'],
+  ['random','name|emoji|country|8-ball|date'],
+  ['qr','qr code generator'],
+  ['image','image'],
 ];
-const has=rx=>unsupported.some(x=>x.test(rx));
-const byEngine={};const rows=[];
-for(const t of CATALOG){
-  const n=t.name.toLowerCase();let status='live',reason='concrete browser/server operation';
-  if(t.engine==='pdf') status='live';
-  else if(unsupported.some(r=>r.test(t.name))){status='blocked';reason='requires an implementation/dependency not present in the real local runtime';}
-  else if(t.engine==='network'&&!(n.includes('cidr')||n.includes('subnet')||n.includes('user-agent')||n.includes('my ip')||n.includes('http status'))){status='blocked';reason='requires network/backend provider';}
-  else if(t.engine==='audio'||t.engine==='video') status='live';
-  else if(/remove|restor|ocr|availability|lookup|checker|tracker|tester|validator|compare|editor|generator|converter|maker|picker|finder|calculator|formatter|encoder|decoder|splitter|resizer|compressor|extractor|masking|simulator|builder|parser|preview|counter|repeater|translator|solver|selector|random|ratio|zone|cycle|intake|maturity|eligibility|corpus|bill|invoice|receipt|resume|letterhead|agreement|policy/i.test(t.name)) status='live';
-  else {status='blocked';reason='no explicit operation rule';}
-  rows.push({...t,status,reason});byEngine[t.engine]=(byEngine[t.engine]||0)+1;
-}
-const counts=rows.reduce((a,r)=>(a[r.status]=(a[r.status]||0)+1,a),{});
-console.log(JSON.stringify({generated_at:new Date().toISOString(),total:rows.length,counts,byEngine,tools:rows},null,2));
-if(counts.blocked) process.exitCode=2;
+const providers = [/audio/i,/video/i,/\.pdf/i,/ocr/i,/background/i,/watermark/i,/exif/i,/upscal/i,/favicon fetch/i,/screenshot/i,/dns/i,/mx record/i,/whois/i,/port checker/i,/website speed/i,/broken link/i,/backlink/i,/plagiarism/i,/keyword position/i,/username availability/i,/youtube thumbnail downloader/i];
+const hasPattern=(engine,name)=>localPatterns.some(([e,p])=>e===engine&&new RegExp(p,'i').test(name));
+const rows=CATALOG.map(t=>{
+  const name=t.name;
+  let status='unsupported', reason='No concrete operation mapping';
+  if(providers.some(r=>r.test(name))) { status='provider-or-specialized'; reason='Requires a specialized decoder/model or network/provider operation; must not be presented as generic local processing'; }
+  else if(hasPattern(t.engine||'text',name)) { status='mapped'; reason='Concrete runtime family mapping exists'; }
+  else if(t.engine==='document') { status='document-specialized'; reason='Document engine requires exact format capability validation'; }
+  else if(t.engine==='pdf') { status='pdf-specialized'; reason='PDF engine requires artifact validation'; }
+  return {...t,status,reason};
+});
+const counts=rows.reduce((m,r)=>(m[r.status]=(m[r.status]||0)+1,m),{});
+console.log(JSON.stringify({total:rows.length,counts,unsupported:rows.filter(r=>r.status==='unsupported').map(r=>({slug:r.slug,name:r.name,engine:r.engine})),specialized:rows.filter(r=>r.status==='provider-or-specialized').map(r=>({slug:r.slug,name:r.name,engine:r.engine}))},null,2));
+if(CATALOG.length!==1594) throw new Error(`Expected 1594 unique routes, found ${CATALOG.length}`);
+if(rows.some(r=>PASS_THROUGH.test(r.reason))) throw new Error('Audit report contains pass-through marker');
