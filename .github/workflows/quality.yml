@@ -15,6 +15,7 @@ jobs:
           node --check tool-engine.js
           node --check scripts/build-pages.mjs
           node --check scripts/normalize-pages.mjs
+          node --check scripts/ci-runtime-fixes.mjs
           node --check engines/free/core.js
           node --check engines/free/pdf.js
           node --check engines/free/pdf-advanced.js
@@ -38,6 +39,8 @@ jobs:
         run: node scripts/build-pages.mjs
       - name: Normalize physical tool bootstraps
         run: node scripts/normalize-pages.mjs
+      - name: Apply runtime fixes
+        run: node scripts/ci-runtime-fixes.mjs
       - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
