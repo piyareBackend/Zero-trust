@@ -45,16 +45,8 @@ jobs:
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
           test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
-          test -f dist/index.html
-          test -f dist/data/tools-index.json
-          test -f dist/login/index.html
-          test -f dist/signup/index.html
-          test -f dist/account/index.html
-          test -f dist/owner/index.html
-          test -f dist/pricing/index.html
-          grep -q 'Quick tools' dist/index.html
-          grep -q 'hamburger' dist/index.html
-          grep -q 'Continue with Google' dist/login/index.html
+          test -f dist/index.html; test -f dist/data/tools-index.json; test -f dist/login/index.html; test -f dist/signup/index.html; test -f dist/account/index.html; test -f dist/owner/index.html; test -f dist/pricing/index.html
+          grep -q 'Quick tools' dist/index.html; grep -q 'hamburger' dist/index.html; grep -q 'Continue with Google' dist/login/index.html
       - name: Prepare Cloudflare Worker + D1 config
         if: env.CF_CONFIGURED == 'true'
         run: |
@@ -63,15 +55,7 @@ jobs:
           if [ -z "$DB_ID" ]; then DB_ID="$(npx --yes wrangler@latest d1 create zero-trust --json | node --input-type=module -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);process.stdout.write(x.uuid||x.database_id||'')})")"; fi
           test -n "$DB_ID"
           cat > wrangler.deploy.jsonc <<EOF
-          {
-            "$schema": "node_modules/wrangler/config-schema.json",
-            "name": "zero-trust",
-            "main": "api/platform-router.mjs",
-            "compatibility_date": "2026-09-08",
-            "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "404-page" },
-            "d1_databases": [{ "binding": "DB", "database_name": "zero-trust", "database_id": "$DB_ID" }],
-            "observability": { "enabled": true }
-          }
+          {"$schema":"node_modules/wrangler/config-schema.json","name":"zero-trust","main":"api/main.mjs","compatibility_date":"2026-09-08","assets":{"directory":"./dist","binding":"ASSETS","not_found_handling":"404-page"},"d1_databases":[{"binding":"DB","database_name":"zero-trust","database_id":"$DB_ID"}],"observability":{"enabled":true}}
           EOF
           npx --yes wrangler@latest d1 execute zero-trust --remote --file=api/schema.sql --config=wrangler.deploy.jsonc
       - name: Configure Cloudflare secrets
