@@ -14,6 +14,7 @@ jobs:
           node --check app.js
           node --check tool-engine.js
           node --check scripts/build-pages.mjs
+          node --check scripts/normalize-pages.mjs
           node --check engines/free/core.js
           node --check engines/free/pdf.js
           node --check engines/free/pdf-advanced.js
@@ -36,10 +37,7 @@ jobs:
       - name: SEO page generator
         run: node scripts/build-pages.mjs
       - name: Normalize physical tool bootstraps
-        run: |
-          find tools -type f -name index.html -print0 | while IFS= read -r -d '' f; do
-            sed -i -E 's#<script src="/Zero-trust/tool-engine\.js\?v=[^"]+" defer></script>#<script src="/Zero-trust/app.js?v=206" defer></script>#g' "$f"
-          done
+        run: node scripts/normalize-pages.mjs
       - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
