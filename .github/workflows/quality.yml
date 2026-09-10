@@ -17,6 +17,7 @@ jobs:
           node --check engines/free/core.js
           node --check engines/free/pdf.js
           node --check engines/free/pdf-advanced.js
+          node --check engines/free/pdf-universal.js
           node --check engines/free/image.js
           node --check engines/free/qr.js
           node --check engines/free/utility.js
@@ -37,7 +38,7 @@ jobs:
       - name: Normalize physical tool bootstraps
         run: |
           find tools -type f -name index.html -print0 | while IFS= read -r -d '' f; do
-            sed -i -E 's#<script src="/Zero-trust/tool-engine\.js\?v=[^"]+" defer></script>#<script src="/Zero-trust/app.js?v=204" defer></script>#g' "$f"
+            sed -i -E 's#<script src="/Zero-trust/tool-engine\.js\?v=[^"]+" defer></script>#<script src="/Zero-trust/app.js?v=206" defer></script>#g' "$f"
           done
       - name: Tool engine coverage
         run: |
@@ -45,11 +46,11 @@ jobs:
           test -f engines/free/security.js
           test -f engines/free/utility.js
           test -f engines/free/qr.js
-          test -f engines/free/pdf-advanced.js
-          grep -q "secure-random-generator" tool-engine.js
-          grep -q "base64-decoder" tool-engine.js
-          grep -q "wifi-qr-generator" tool-engine.js
-          grep -q "pdf-advanced" tool-engine.js
+          test -f engines/free/pdf-universal.js
+          grep -q "secure-random-generator" app.js
+          grep -q "base64-decoder" app.js
+          grep -q "wifi-qr-generator" app.js
+          grep -q "pdf-universal" tool-engine.js
       - name: Browser smoke test all registered routes
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
