@@ -1,32 +1,22 @@
-import { chromium } from 'playwright';
-import fs from 'node:fs';
+import{chromium}from'playwright';
+import fs from'node:fs';
 const app=fs.readFileSync('app.js','utf8');
 const routes=[...app.matchAll(/\['([a-z0-9-]+)','[^']*','[^']*'\]/g)].map(m=>m[1]);
-if(routes.length<100)throw new Error(`Expected 100 routes, found ${routes.length}`);
-const browser=await chromium.launch({headless:true});
-const page=await browser.newPage();
-const failures=[];
-page.on('pageerror',e=>failures.push(`pageerror: ${e.message}`));
-for(const slug of routes){
-  failures.length=0;
-  await page.goto(`http://127.0.0.1:4173/Zero-trust/tools/${slug}/`,{waitUntil:'domcontentloaded',timeout:30000});
-  await page.waitForFunction(()=>document.querySelector('#toolApp .tool-box')||document.querySelector('#toolApp .output[data-status="error"]'),null,{timeout:15000});
-  const result=await page.evaluate(()=>({box:!!document.querySelector('#toolApp .tool-box'),error:document.querySelector('#toolApp .output[data-status="error"]')?.textContent||'',title:document.title}));
-  if(!result.box||result.error)failures.push(`${slug}: engine did not mount (${result.error||'missing .tool-box'})`);
-  if(failures.length)throw new Error(failures.join('\n'));
-}
-await page.goto('http://127.0.0.1:4173/Zero-trust/tools/password-generator/',{waitUntil:'networkidle',timeout:30000});
-await page.locator('#run').click();
-if(!(await page.locator('#outText').inputValue()))throw new Error('Password generator action failed');
-await page.goto('http://127.0.0.1:4173/Zero-trust/tools/json-formatter/',{waitUntil:'networkidle',timeout:30000});
-await page.locator('#input').fill('{"a":1}');
-await page.locator('#format').click();
-await page.waitForFunction(()=>document.querySelector('#out')?.textContent.includes('"a": 1'),null,{timeout:5000}).catch(async()=>{const output=await page.locator('#out').textContent();throw new Error(`JSON formatter action failed: ${output||'no output'}`)});
-await page.goto('http://127.0.0.1:4173/Zero-trust/tools/base64-decoder/',{waitUntil:'networkidle',timeout:30000});
-await page.locator('#input').fill('SGVsbG8=');await page.locator('#decode').click();
-await page.waitForFunction(()=>document.querySelector('#out')?.textContent.trim()==='Hello',null,{timeout:5000}).catch(async()=>{const output=await page.locator('#out').textContent();throw new Error(`Base64 decoder action failed: ${output||'no output'}`)});
-await page.goto('http://127.0.0.1:4173/Zero-trust/tools/secure-random-generator/',{waitUntil:'networkidle',timeout:30000});
-await page.locator('#run').click();
-if(!(await page.locator('#outText').inputValue()).length)throw new Error('Secure random generator action failed');
-await browser.close();
-console.log(`Browser smoke passed: ${routes.length} registered tool routes + action checks`);
+if(routes.length<200)throw new Error(`Expected 200+ routes, found ${routes.length}`);
+const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+page.on('pageerror',e=>{throw e});
+for(const slug of routes){await page.goto(`http://127.0.0.1:4173/Zero-trust/tools/${slug}/`,{waitUntil:'domcontentloaded',timeout:30000});await page.waitForSelector('#toolApp .tool-box',{timeout:15000});const text=await page.locator('#toolApp').innerText();if(text.includes('could not load'))throw new Error(`Engine failed: ${slug}`);if(await page.locator('#relatedTools .tool-card').count()===0)throw new Error(`Related tools missing: ${slug}`)}
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/',{waitUntil:'domcontentloaded'});await page.locator('#toolSearch').fill('PDF');if(await page.locator('#allTools .tool-card').count()<100)throw new Error('PDF search did not expose 100+ PDF tools');await page.locator('#categoryFilter').selectOption('pdf');if(await page.locator('#allTools .tool-card').count()<100)throw new Error('PDF category filter did not expose 100+ PDF tools');
+const pdfBytes=await page.evaluate(async()=>{const{PDFDocument}=await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');const d=await PDFDocument.create();const f=await d.embedFont('Helvetica');for(let i=1;i<=3;i++){const p=d.addPage([400,300]);p.drawText(`Smoke test page ${i}`,{x:40,y:250,size:18,font:f})}return Array.from(await d.save())});
+async function upload(bytes,name='smoke.pdf'){await page.locator('#file').setInputFiles({name,mimeType:'application/pdf',buffer:Buffer.from(bytes)})}
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-page-count/');await upload(pdfBytes);await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('3 page'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-page-duplicate/');await upload(pdfBytes);await page.locator('#pages').fill('2');await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('duplicated'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-page-delete-range/');await upload(pdfBytes);await page.locator('#pages').fill('2');await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('Created 2'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-page-number-overlay/');await upload(pdfBytes);await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('Applied 3'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-text-search/');await upload(pdfBytes);await page.locator('#query').fill('Smoke test page 2');await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('Page 2'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/pdf-to-png-all/');await upload(pdfBytes);await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('Rendered 3'));
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/password-generator/');await page.locator('#run').click();if((await page.locator('#outText').inputValue()).length<8)throw new Error('Password generator action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/secure-random-generator/');await page.locator('#run').click();if(!(await page.locator('#outText').inputValue()).length)throw new Error('Secure random generator action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/json-formatter/');await page.locator('#input').fill('{"a":1}');await page.locator('#format').click();if(!(await page.locator('#out').innerText()).includes('"a": 1'))throw new Error('JSON formatter action failed');
+await page.goto('http://127.0.0.1:4173/Zero-trust/tools/base64-decoder/');await page.locator('#input').fill('SGVsbG8=');await page.locator('#decode').click();if((await page.locator('#out').innerText()).trim()!=='Hello')throw new Error('Base64 decoder action failed');
+await browser.close();console.log(`Browser smoke passed: ${routes.length} routes, related tools, search/filter, and functional PDF/security/developer actions`);
