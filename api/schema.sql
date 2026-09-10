@@ -11,6 +11,23 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT NOT NULL,
   last_login_at TEXT
 );
+CREATE TABLE IF NOT EXISTS profiles (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  first_name TEXT NOT NULL DEFAULT '',
+  last_name TEXT NOT NULL DEFAULT '',
+  display_name TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  locale TEXT NOT NULL DEFAULT 'en-IN',
+  phone TEXT NOT NULL DEFAULT '',
+  phone_verified INTEGER NOT NULL DEFAULT 0,
+  terms_accepted_at TEXT,
+  privacy_accepted_at TEXT,
+  marketing_opt_in INTEGER NOT NULL DEFAULT 0,
+  onboarding_complete INTEGER NOT NULL DEFAULT 0,
+  avatar_url TEXT,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -24,6 +41,26 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  redirect_path TEXT NOT NULL DEFAULT '/account/',
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  ip_hash TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_expiry ON oauth_states(expires_at);
+CREATE TABLE IF NOT EXISTS oauth_identities (
+  provider TEXT NOT NULL,
+  provider_user_id TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(provider,provider_user_id),
+  UNIQUE(provider,user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_identity_user ON oauth_identities(user_id);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
