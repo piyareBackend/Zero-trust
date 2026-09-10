@@ -21,6 +21,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Normalize physical tool bootstraps
+        run: |
+          find tools -type f -name index.html -print0 | while IFS= read -r -d '' f; do
+            sed -i -E 's#<script src="/Zero-trust/tool-engine\.js\?v=[^"]+" defer></script>#<script src="/Zero-trust/app.js?v=202" defer></script>#g' "$f"
+          done
       - name: Protect browser-delivered JavaScript
         run: |
           npx --yes terser@5.44.0 app.js -c -m -o app.js
