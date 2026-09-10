@@ -16,6 +16,7 @@ jobs:
           node --check scripts/build-pages.mjs
           node --check scripts/build-cloudflare.mjs
           node --check scripts/merge-legacy-pages.mjs
+          node --check tests/legacy-smoke.mjs
           node --check engines/free/universal.js
           node --check engines/free/extended.js
           node --check engines/free/pdf-universal.js
@@ -54,3 +55,4 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           SITE_ROOT=dist node tests/smoke.mjs
+          SITE_ROOT=dist node tests/legacy-smoke.mjs
