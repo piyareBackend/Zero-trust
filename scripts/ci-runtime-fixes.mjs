@@ -15,7 +15,6 @@ let t=fs.readFileSync(smoke,'utf8');
 const smokeBefore=t;
 t=t.replace(/(text-count-quick\/'.*?document\.querySelector\()'#status'/s, "$1'#out'");
 t=t.replace(/(developer-format-quick\/'.*?document\.querySelector\()'#status'/s, "$1'#out'");
-t=t.replace(/(calculator-percentage-basic\/'.*?document\.querySelector\()'#status'/s, "$1'#out'");
 if(t===smokeBefore) throw new Error('Expected smoke-test output selector fixes were not applied.');
 fs.writeFileSync(smoke,t);
 console.log('Applied PDF text-search and smoke-test runtime fixes.');
