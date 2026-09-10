@@ -15,11 +15,12 @@ jobs:
           node --check tool-engine.js
           node --check scripts/build-pages.mjs
           node --check engines/free/universal.js
+          node --check engines/free/extended.js
           node --check engines/free/pdf-universal.js
           node --check data/catalog.mjs
       - name: Catalog integrity
         run: |
-          node --input-type=module -e "import zlib from 'node:zlib'; import { CATALOG_GZIP_B64 } from './data/catalog.mjs'; const a=JSON.parse(zlib.gunzipSync(Buffer.from(CATALOG_GZIP_B64,'base64'))); console.log('catalog='+a.length); if(a.length!==1009) process.exit(1); if(new Set(a.map(x=>x.slug)).size!==1009) process.exit(1)"
+          node --input-type=module -e "import { CATALOG } from './data/catalog.mjs'; console.log('catalog='+CATALOG.length); if(CATALOG.length!==1009) process.exit(1); if(new Set(CATALOG.map(x=>x.slug)).size!==1009) process.exit(1)"
       - name: Build complete static site
         run: |
           rm -rf dist
