@@ -63,18 +63,8 @@ jobs:
       - name: API account and entitlement smoke
         run: |
           npm install --no-save --no-package-lock wrangler@latest
-          cat > /tmp/wrangler-test.jsonc <<'EOF'
-          {
-            "$schema": "node_modules/wrangler/config-schema.json",
-            "name": "zero-trust-ci",
-            "main": "api/worker.mjs",
-            "compatibility_date": "2026-09-08",
-            "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "404-page" },
-            "d1_databases": [{ "binding": "DB", "database_name": "zero-trust-ci", "database_id": "00000000-0000-0000-0000-000000000001" }]
-          }
-          EOF
-          npx --yes wrangler@latest d1 execute zero-trust-ci --local --file=api/schema.sql --config=/tmp/wrangler-test.jsonc
-          (TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" npx --yes wrangler@latest dev --local --config=/tmp/wrangler-test.jsonc --port=8787 >/tmp/zt-worker.log 2>&1) &
+          npx --yes wrangler@latest d1 execute zero-trust-ci --local --file=api/schema.sql --config=wrangler.ci.jsonc
+          (TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" npx --yes wrangler@latest dev --local --config=wrangler.ci.jsonc --port=8787 >/tmp/zt-worker.log 2>&1) &
           WORKER_PID=$!
           trap 'kill $WORKER_PID 2>/dev/null || true' EXIT
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8787/api/health >/dev/null && break; sleep 1; done
