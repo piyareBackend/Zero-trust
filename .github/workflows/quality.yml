@@ -13,6 +13,7 @@ jobs:
         run: |
           node --check app.js
           node --check tool-engine.js
+          node --check scripts/build-pages.mjs
           node --check engines/free/core.js
           node --check engines/free/pdf.js
           node --check engines/free/pdf-advanced.js
@@ -30,8 +31,9 @@ jobs:
           ! grep -R "api\.domain\.com" . --exclude-dir=.git
       - name: Tool registry coverage
         run: |
-          count=$(grep -o "\['[a-z0-9-]*','[^']*','[^']*'\]" app.js | wc -l)
-          test "$count" -ge 200
+          node --input-type=module -e "import fs from 'node:fs'; import vm from 'node:vm'; const ctx={window:{},document:{addEventListener(){}}}; vm.runInNewContext(fs.readFileSync('app.js','utf8'),ctx); const n=ctx.window.ZT_TOOLS.length; console.log('tools='+n); if(n<500) process.exit(1)"
+      - name: SEO page generator
+        run: node scripts/build-pages.mjs
       - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
