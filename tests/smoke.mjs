@@ -17,7 +17,7 @@ for(const slug of routes){
 }
 await page.goto('http://127.0.0.1:4173/Zero-trust/tools/password-generator/',{waitUntil:'networkidle',timeout:30000});
 await page.locator('#run').click();
-if(!(await page.locator('#out').inputValue()))throw new Error('Password generator action failed');
+if(!(await page.locator('#outText').inputValue()))throw new Error('Password generator action failed');
 await page.goto('http://127.0.0.1:4173/Zero-trust/tools/json-formatter/',{waitUntil:'networkidle',timeout:30000});
 await page.locator('#input').fill('{"a":1}');
 await page.locator('#format').click();
@@ -27,6 +27,6 @@ await page.locator('#input').fill('SGVsbG8=');await page.locator('#decode').clic
 await page.waitForFunction(()=>document.querySelector('#out')?.textContent.trim()==='Hello',null,{timeout:5000}).catch(async()=>{const output=await page.locator('#out').textContent();throw new Error(`Base64 decoder action failed: ${output||'no output'}`)});
 await page.goto('http://127.0.0.1:4173/Zero-trust/tools/secure-random-generator/',{waitUntil:'networkidle',timeout:30000});
 await page.locator('#run').click();
-if(!(await page.locator('#out').inputValue()).length)throw new Error('Secure random generator action failed');
+if(!(await page.locator('#outText').inputValue()).length)throw new Error('Secure random generator action failed');
 await browser.close();
 console.log(`Browser smoke passed: ${routes.length} registered tool routes + action checks`);
