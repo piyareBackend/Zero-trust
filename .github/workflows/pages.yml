@@ -1,4 +1,4 @@
-name: Deploy Zero Trust to Cloudflare Pages
+name: Deploy Zero Trust
 on:
   push:
     branches: [main]
@@ -6,8 +6,10 @@ on:
 permissions:
   contents: read
   deployments: write
+  pages: write
+  id-token: write
 concurrency:
-  group: cloudflare-pages
+  group: zero-trust-pages
   cancel-in-progress: true
 jobs:
   deploy:
@@ -30,6 +32,8 @@ jobs:
               if old in s:
                   p.write_text(s.replace(old,new),encoding='utf-8')
           PY
+      - name: Apply runtime fixes
+        run: node scripts/ci-runtime-fixes.mjs
       - name: Align runtime cache versions
         run: sed -i 's/tool-engine\.js?v=203/tool-engine.js?v=207/g' app.js
       - name: Protect browser-delivered JavaScript
@@ -39,9 +43,21 @@ jobs:
           for f in engines/free/*.js; do npx --yes terser@5.44.0 "$f" -c -m -o "$f"; done
           find . -name '*.map' -delete
       - name: Deploy to Cloudflare Pages
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy . --project-name=zero-trust --branch=main --commit-message="${{ github.event.head_commit.message }}" --commit-hash=${{ github.sha }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure GitHub Pages fallback
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        uses: actions/configure-pages@v5
+      - name: Upload GitHub Pages artifact
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy GitHub Pages fallback
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        uses: actions/deploy-pages@v4
