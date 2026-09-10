@@ -1,0 +1,13 @@
+import { CATALOG as MODERN_CATALOG } from './catalog.mjs';
+import { LEGACY_TOOLS } from './legacy-tools.mjs';
+const merged = new Map();
+for (const t of MODERN_CATALOG) merged.set(t.slug, t);
+for (const t of LEGACY_TOOLS) if (!merged.has(t.slug)) merged.set(t.slug, t);
+export const CATALOG = [...merged.values()];
+export const MODERN_TOOL_COUNT = MODERN_CATALOG.length;
+export const LEGACY_TOOL_COUNT = LEGACY_TOOLS.length;
+export const RESTORED_LEGACY_COUNT = CATALOG.length - MODERN_CATALOG.length;
+if (MODERN_CATALOG.length !== 1009) throw new Error(`Modern catalog integrity failure: ${MODERN_CATALOG.length}`);
+if (LEGACY_TOOLS.length !== 200) throw new Error(`Legacy catalog integrity failure: ${LEGACY_TOOLS.length}`);
+if (new Set(CATALOG.map(x => x.slug)).size !== CATALOG.length) throw new Error('Combined catalog contains duplicate slugs');
+console.log(`Combined catalog: ${MODERN_CATALOG.length} modern + ${LEGACY_TOOLS.length} historical, ${RESTORED_LEGACY_COUNT} historical routes newly restored, ${CATALOG.length} unique total.`);
