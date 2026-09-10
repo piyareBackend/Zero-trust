@@ -32,7 +32,8 @@ jobs:
           SITE_BASE=/Zero-trust/ node scripts/merge-legacy-pages.mjs
       - name: Verify combined artifact
         run: |
-          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$(node --input-type=module -e "import { CATALOG } from './data/catalog-combined.mjs'; process.stdout.write(String(CATALOG.length))")"
+          EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
           test -f dist/index.html
           test -f dist/data/tools-index.json
