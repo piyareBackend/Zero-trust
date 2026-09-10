@@ -2,7 +2,7 @@
   "name": "zero-trust-mobile",
   "private": true,
   "scripts": {
-    "build:web": "node ../scripts/build-cloudflare.mjs && node ../scripts/enhance-platform.mjs",
+    "build:web": "cd .. && node scripts/build-cloudflare.mjs",
     "sync": "npm run build:web && cap sync",
     "android": "npm run sync && cap open android",
     "ios": "npm run sync && cap open ios"
