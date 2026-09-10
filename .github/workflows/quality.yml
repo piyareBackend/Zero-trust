@@ -34,7 +34,8 @@ jobs:
           cp styles.css app.js tool-engine.js manifest.json sw.js 404.html _headers _redirects dist/
           cp -r engines dist/engines
           SITE_BASE=/ node scripts/merge-legacy-pages.mjs
-          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$(node --input-type=module -e "import { CATALOG } from './data/catalog-combined.mjs'; process.stdout.write(String(CATALOG.length))")"
+          EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
       - name: Static page integrity
         run: |
