@@ -14,57 +14,37 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    env:
-      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Generate 500+ SEO tool pages
-        run: node scripts/build-pages.mjs
-      - name: Normalize physical tool bootstraps
-        run: node scripts/normalize-pages.mjs
-      - name: Replace generated legacy brand marks
+      - name: Build clean Cloudflare artifact
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          old='<span class="brand-mark">ZT</span><span>Zero Trust</span>'
-          new='<span class="brand-mark brand-placeholder" aria-hidden="true"></span><span class="brand-name">Zero Trust</span>'
-          for p in Path('.').rglob('*.html'):
-              s=p.read_text(encoding='utf-8')
-              if old in s:
-                  p.write_text(s.replace(old,new),encoding='utf-8')
-          PY
-      - name: Apply runtime fixes
-        run: node scripts/ci-runtime-fixes.mjs
-      - name: Align runtime cache versions
-        run: sed -i 's/tool-engine\.js?v=203/tool-engine.js?v=207/g' app.js
-      - name: Protect browser-delivered JavaScript
+          rm -rf dist
+          OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
+          cp styles.css app.js tool-engine.js manifest.json sw.js 404.html _headers _redirects dist/
+          cp -r engines assets dist/
+      - name: Verify artifact
         run: |
-          npx --yes terser@5.44.0 app.js -c -m -o app.js
-          npx --yes terser@5.44.0 tool-engine.js -c -m -o tool-engine.js
-          for f in engines/free/*.js; do npx --yes terser@5.44.0 "$f" -c -m -o "$f"; done
-          find . -name '*.map' -delete
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 1009
+          test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
+          test -f dist/index.html
+          test -f dist/data/tools-index.json
       - name: Deploy to Cloudflare Pages
-        if: ${{ env.CF_TOKEN != '' && env.CF_ACCOUNT != '' }}
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ env.CF_TOKEN }}
-          accountId: ${{ env.CF_ACCOUNT }}
-          command: pages deploy . --project-name=zero-trust --branch=main --commit-message="${{ github.event.head_commit.message }}" --commit-hash=${{ github.sha }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=zero-trust --branch=main --commit-message="${{ github.event.head_commit.message }}" --commit-hash=${{ github.sha }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure GitHub Pages fallback
-        if: ${{ env.CF_TOKEN == '' || env.CF_ACCOUNT == '' }}
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
         uses: actions/configure-pages@v5
       - name: Upload GitHub Pages artifact
-        if: ${{ env.CF_TOKEN == '' || env.CF_ACCOUNT == '' }}
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - name: Deploy GitHub Pages fallback
-        id: deployment
-        if: ${{ env.CF_TOKEN == '' || env.CF_ACCOUNT == '' }}
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
         uses: actions/deploy-pages@v4
