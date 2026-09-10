@@ -17,18 +17,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build clean Cloudflare artifact
+      - name: Build Cloudflare artifact
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           rm -rf dist
-          OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
+          node scripts/build-cloudflare.mjs
+      - name: Build GitHub Pages artifact
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        run: |
+          rm -rf dist
+          OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/build-pages.mjs
           cp styles.css app.js tool-engine.js manifest.json sw.js 404.html _headers _redirects dist/
           cp -r engines assets dist/
-      - name: Verify artifact
+          SITE_BASE=/Zero-trust/ node scripts/merge-legacy-pages.mjs
+      - name: Verify combined artifact
         run: |
-          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 1009
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$(node --input-type=module -e "import { CATALOG } from './data/catalog-combined.mjs'; process.stdout.write(String(CATALOG.length))")"
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
           test -f dist/index.html
           test -f dist/data/tools-index.json
+          grep -q 'Quick tools' dist/index.html
+          grep -q 'hamburger' dist/index.html
       - name: Deploy to Cloudflare Pages
         if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
