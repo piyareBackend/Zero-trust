@@ -24,7 +24,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           old='<span class="brand-mark">ZT</span><span>Zero Trust</span>'
-          new='<span class="brand-mark"><img src="/Zero-trust/assets/zero-trust-logo.svg" alt="Zero Trust logo" width="38" height="38"></span><span>Zero Trust</span>'
+          new='<span class="brand-mark"><img src="/Zero-trust/assets/zero-trust-logo.png" alt="Zero Trust logo" width="38" height="38"></span><span>Zero Trust</span>'
           for p in Path('.').rglob('*.html'):
               s=p.read_text(encoding='utf-8')
               if old in s:
