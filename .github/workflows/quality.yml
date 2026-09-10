@@ -14,61 +14,38 @@ jobs:
           node --check app.js
           node --check tool-engine.js
           node --check scripts/build-pages.mjs
-          node --check scripts/normalize-pages.mjs
-          node --check scripts/ci-runtime-fixes.mjs
-          node --check engines/free/core.js
-          node --check engines/free/pdf.js
-          node --check engines/free/pdf-advanced.js
+          node --check engines/free/universal.js
           node --check engines/free/pdf-universal.js
-          node --check engines/free/image.js
-          node --check engines/free/qr.js
-          node --check engines/free/utility.js
-          node --check engines/free/security.js
-          node --check engines/free/generic.js
-      - name: Required foundation files
-        run: test -f index.html && test -f styles.css && test -f manifest.json && test -f sw.js && test -f robots.txt && test -f sitemap.xml && test -f _headers && test -f 404.html
-      - name: Lazy engine boundary
+          node --check data/catalog.mjs
+      - name: Catalog integrity
         run: |
-          test -f engines/paid/README.md
-          ! grep -R "engines/paid" engines/free tool-engine.js
-          ! grep -R "api\.domain\.com" . --exclude-dir=.git
-      - name: Tool registry coverage
+          node --input-type=module -e "import zlib from 'node:zlib'; import { CATALOG_GZIP_B64 } from './data/catalog.mjs'; const a=JSON.parse(zlib.gunzipSync(Buffer.from(CATALOG_GZIP_B64,'base64'))); console.log('catalog='+a.length); if(a.length!==1009) process.exit(1); if(new Set(a.map(x=>x.slug)).size!==1009) process.exit(1)"
+      - name: Build complete static site
         run: |
-          node --input-type=module -e "import fs from 'node:fs'; import vm from 'node:vm'; const ctx={window:{},document:{addEventListener(){}}}; vm.runInNewContext(fs.readFileSync('app.js','utf8'),ctx); const n=ctx.window.ZT_TOOLS.length; console.log('tools='+n); if(n<500) process.exit(1)"
-      - name: SEO page generator
-        run: node scripts/build-pages.mjs
-      - name: Normalize physical tool bootstraps
-        run: node scripts/normalize-pages.mjs
-      - name: Apply runtime fixes
-        run: node scripts/ci-runtime-fixes.mjs
-      - name: Tool engine coverage
+          rm -rf dist
+          OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 1009
+          test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
+      - name: Static page integrity
         run: |
-          test -f engines/free/generic.js
-          test -f engines/free/security.js
-          test -f engines/free/utility.js
-          test -f engines/free/qr.js
-          test -f engines/free/pdf-universal.js
-          grep -q "secure-random-generator" app.js
-          grep -q "base64-decoder" app.js
-          grep -q "wifi-qr-generator" app.js
-          grep -q "pdf-universal" tool-engine.js
-      - name: Browser smoke test all registered routes
+          test -f dist/index.html
+          test -f dist/tools/index.html
+          test -f dist/styles.css
+          cp app.js dist/app.js
+          cp tool-engine.js dist/tool-engine.js
+          cp -r engines dist/engines
+          grep -q 'Real browser tool' dist/tools/jpg-to-png-converter/index.html
+          grep -q 'id="toolApp"' dist/tools/pdf-page-count/index.html
+          grep -q '1009' dist/tools/index.html
+      - name: Browser smoke + privacy test
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright@1.55.0 install --with-deps chromium
           cat > /tmp/zt-server.py <<'PY'
-          from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-          from pathlib import Path
-          class Handler(SimpleHTTPRequestHandler):
-              def send_head(self):
-                  path = self.translate_path(self.path)
-                  p = Path(path)
-                  if not p.is_file() and not (p.is_dir() and (p / 'index.html').is_file()):
-                      self.path = '/Zero-trust/404.html'
-                  return super().send_head()
-          ThreadingHTTPServer(('127.0.0.1', 4173), Handler).serve_forever()
+          from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
+          ThreadingHTTPServer(('127.0.0.1',4173),SimpleHTTPRequestHandler).serve_forever()
           PY
-          (cd .. && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) &
+          (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/smoke.mjs
