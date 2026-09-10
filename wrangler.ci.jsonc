@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zero-trust-ci",
-  "main": "api/platform-router.mjs",
+  "main": "api/main.mjs",
   "compatibility_date": "2026-09-08",
   "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "404-page" },
   "d1_databases": [{ "binding": "DB", "database_name": "zero-trust-ci", "database_id": "00000000-0000-0000-0000-000000000001" }]
