@@ -15,6 +15,7 @@ jobs:
           node --check tool-engine.js
           node --check engines/free/core.js
           node --check engines/free/pdf.js
+          node --check engines/free/pdf-advanced.js
           node --check engines/free/image.js
           node --check engines/free/qr.js
           node --check engines/free/utility.js
@@ -27,19 +28,21 @@ jobs:
           test -f engines/paid/README.md
           ! grep -R "engines/paid" engines/free tool-engine.js
           ! grep -R "api\.domain\.com" . --exclude-dir=.git
-      - name: First 100 tool registry
+      - name: Tool registry coverage
         run: |
           count=$(grep -o "\['[a-z0-9-]*','[^']*','[^']*'\]" app.js | wc -l)
-          test "$count" -ge 100
+          test "$count" -ge 200
       - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
           test -f engines/free/security.js
           test -f engines/free/utility.js
           test -f engines/free/qr.js
+          test -f engines/free/pdf-advanced.js
           grep -q "secure-random-generator" tool-engine.js
           grep -q "base64-decoder" tool-engine.js
           grep -q "wifi-qr-generator" tool-engine.js
+          grep -q "pdf-advanced" tool-engine.js
       - name: Browser smoke test all registered routes
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
@@ -50,7 +53,8 @@ jobs:
           class Handler(SimpleHTTPRequestHandler):
               def send_head(self):
                   path = self.translate_path(self.path)
-                  if not Path(path).is_file():
+                  p = Path(path)
+                  if not p.is_file() and not (p.is_dir() and (p / 'index.html').is_file()):
                       self.path = '/Zero-trust/404.html'
                   return super().send_head()
           ThreadingHTTPServer(('127.0.0.1', 4173), Handler).serve_forever()
