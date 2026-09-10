@@ -15,6 +15,8 @@ jobs:
           node --check account.js
           node --check tool-engine.js
           node --check api/worker.mjs
+          node --check api/platform-router.mjs
+          node --check api/main.mjs
           node --check scripts/build-pages.mjs
           node --check scripts/build-cloudflare.mjs
           node --check scripts/enhance-platform.mjs
@@ -44,20 +46,9 @@ jobs:
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
       - name: Static page integrity
         run: |
-          test -f dist/index.html
-          test -f dist/tools/index.html
-          test -f dist/styles.css
-          test -f dist/tools/jpg-to-png-converter/index.html
-          test -f dist/tools/pdf-page-counter/index.html
-          test -f dist/login/index.html
-          test -f dist/signup/index.html
-          test -f dist/account/index.html
-          test -f dist/owner/index.html
-          test -f dist/pricing/index.html
-          grep -q 'Real browser tool' dist/tools/jpg-to-png-converter/index.html
-          grep -q 'id="toolApp"' dist/tools/pdf-page-counter/index.html
-          grep -q 'Quick tools' dist/index.html
-          grep -q 'hamburger' dist/index.html
+          test -f dist/index.html; test -f dist/tools/index.html; test -f dist/styles.css; test -f dist/tools/jpg-to-png-converter/index.html; test -f dist/tools/pdf-page-counter/index.html
+          test -f dist/login/index.html; test -f dist/signup/index.html; test -f dist/account/index.html; test -f dist/owner/index.html; test -f dist/pricing/index.html
+          grep -q 'Real browser tool' dist/tools/jpg-to-png-converter/index.html; grep -q 'id="toolApp"' dist/tools/pdf-page-counter/index.html; grep -q 'Quick tools' dist/index.html; grep -q 'hamburger' dist/index.html; grep -q 'Continue with Google' dist/login/index.html
       - name: Security regression
         run: node tests/security-static.mjs
       - name: API account and entitlement smoke
@@ -68,7 +59,7 @@ jobs:
           WORKER_PID=$!
           trap 'kill $WORKER_PID 2>/dev/null || true' EXIT
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8787/api/health >/dev/null && break; sleep 1; done
-          API_BASE=http://127.0.0.1:8787 TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" node tests/api-smoke.mjs
+          timeout 120s env API_BASE=http://127.0.0.1:8787 TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" node tests/api-smoke.mjs
       - name: Browser smoke + privacy test
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
