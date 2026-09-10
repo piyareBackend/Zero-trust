@@ -1,55 +1,36 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
+import zlib from 'node:zlib';
+import { CATALOG_GZIP_B64 } from '../data/catalog.mjs';
 
 const root=process.cwd();
-const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
-const ctx={window:{},document:{addEventListener(){}}};
-vm.runInNewContext(app,ctx,{filename:'app.js'});
-const tools=ctx.window.ZT_TOOLS||[];
-if(tools.length<500)throw new Error(`Expected 500+ tools, found ${tools.length}`);
-const base='/Zero-trust/';
-const esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const categories=[...new Set(tools.map(t=>t[2]))];
-const nav=`<header class="site-header"><a class="brand" href="${base}" aria-label="Zero Trust home"><span class="brand-mark">ZT</span><span>Zero Trust</span></a><nav><details class="nav-menu"><summary>Tools</summary><div class="mega-menu"><a href="${base}tools/">All tools (${tools.length})</a>${categories.map(c=>`<a href="${base}tools/category/${c}/">${esc(c[0].toUpperCase()+c.slice(1))}</a>`).join('')}</div></details><a class="nav-link" href="${base}tools/">Search</a><a class="nav-link" href="${base}security/">Security</a><button id="themeBtn" class="icon-btn" type="button">Dark</button><button id="menuBtn" class="icon-btn mobile-menu" type="button" aria-expanded="false">Menu</button></nav><div id="mobileNav" class="mega-menu" hidden><a href="${base}tools/">All tools</a>${categories.map(c=>`<a href="${base}tools/category/${c}/">${esc(c)}</a>`).join('')}</div></header>`;
-const footer=`<footer><span>© 2026 Zero Trust</span><span><a href="${base}privacy/">Privacy</a> · <a href="${base}security/">Security</a> · <a href="${base}accessibility/">Accessibility</a></span></footer>`;
-const shell=(title,description,body,canonical,robots='index,follow')=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title><meta name="description" content="${esc(description)}"><meta name="robots" content="${robots}"><link rel="canonical" href="${base}${canonical}"><link rel="stylesheet" href="${base}styles.css"><script type="application/ld+json">${JSON.stringify({ '@context':'https://schema.org','@type':'WebApplication',name:title,applicationCategory:'UtilitiesApplication',operatingSystem:'Any',description})}</script></head><body>${nav}<main>${body}</main>${footer}<script src="${base}app.js?v=204" defer></script></body></html>`;
-const write=(rel,html)=>{const file=path.join(root,rel);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,html)};
-const patchExisting=(file,title,description,canonical)=>{
- let html=fs.readFileSync(file,'utf8');
- const setTag=(re,tag)=>{html=re.test(html)?html.replace(re,tag):html.replace(/<head>/i,`<head>${tag}`)};
- setTag(/<title>[^<]*<\/title>/i,`<title>${esc(title)}</title>`);
- setTag(/<meta\s+name=["']description["'][^>]*>/i,`<meta name="description" content="${esc(description)}">`);
- setTag(/<meta\s+name=["']robots["'][^>]*>/i,`<meta name="robots" content="index,follow">`);
- setTag(/<link\s+rel=["']canonical["'][^>]*>/i,`<link rel="canonical" href="${base}${canonical}">`);
- if(!/<script\s+type=["']application\/ld\+json["']/i.test(html))html=html.replace(/<\/head>/i,`<script type="application/ld+json">${JSON.stringify({'@context':'https://schema.org','@type':'WebApplication',name:title,applicationCategory:'UtilitiesApplication',operatingSystem:'Any',description})}</script></head>`);
- if(!html.includes(`${base}app.js`))html=html.replace(/<\/body>/i,`<script src="${base}app.js?v=204" defer></script></body>`);
- // Existing hand-authored pages keep their specialized UI. Add the stable
- // selectors required by the shared runtime instead of replacing that UI.
- if(!/<h1[^>]*\bid=["']toolTitle["']/i.test(html))html=html.replace(/<h1(?![^>]*\bid=)/i,'<h1 id="toolTitle"');
- if(!/<p[^>]*\bid=["']toolDesc["']/i.test(html))html=html.replace(/<p(?![^>]*\bid=)/i,'<p id="toolDesc"');
- fs.writeFileSync(file,html);
-};
-
-for(const [slug,name,cat] of tools){
- const related=tools.filter(t=>t[0]!==slug&&t[2]===cat).slice(0,8);
- const desc=`Use ${name} online for fast, privacy-first browser processing. Learn how it works, supported input, and related tools.`;
- const faq=[`What is ${name}?`,`How do I use ${name}?`,`Are files uploaded?`];
- const body=`<section class="tool-shell"><div class="breadcrumbs"><a href="${base}tools/">All tools</a> / <a href="${base}tools/category/${cat}/">${esc(cat)}</a> / ${esc(name)}</div><div class="eyebrow">${esc(cat).toUpperCase()} TOOL</div><h1 id="toolTitle">${esc(name)}</h1><p id="toolDesc">${esc(desc)}</p><span class="privacy-badge">LOCAL-FIRST WHEN SUPPORTED</span><div id="toolApp"></div><section class="content-section"><h2>How to use ${esc(name)}</h2><ol><li>Choose the input required by this tool.</li><li>Run the operation in your browser.</li><li>Review the result and download it when ready.</li></ol><h2>Privacy and file handling</h2><p>Zero Trust is designed around local-first processing. Network-dependent capabilities are disclosed in the tool interface.</p><h2>Frequently asked questions</h2>${faq.map(q=>`<h3>${esc(q)}</h3><p>The tool page explains the supported operation and processing mode before you run it.</p>`).join('')}</section></section><section class="section related-section"><div class="section-head"><div><div class="eyebrow">RELATED TOOLS</div><h2>More ${esc(cat)} tools</h2></div><a href="${base}tools/category/${cat}/">View category</a></div><div class="tool-grid">${related.map(t=>`<a class="tool-card" href="${base}tools/${t[0]}/"><span class="eyebrow">${esc(t[2])}</span><h3>${esc(t[1])}</h3><p>Private browser-based utility.</p></a>`).join('')}</div></section>`;
- const faqSchema={'@context':'https://schema.org','@type':'FAQPage',mainEntity:faq.map(q=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:'See the tool instructions and processing details on this page.'}}))};
- const file=path.join(root,`tools/${slug}/index.html`);
- if(fs.existsSync(file))patchExisting(file,`${name} — Zero Trust`,desc,`tools/${slug}/`);
- else write(`tools/${slug}/index.html`,shell(`${name} — Zero Trust`,desc,body,`tools/${slug}/`).replace('</head>',`<script type="application/ld+json">${JSON.stringify(faqSchema)}</script></head>`));
+const tools=JSON.parse(zlib.gunzipSync(Buffer.from(CATALOG_GZIP_B64,'base64')).toString('utf8'));
+if(tools.length!==1009) throw new Error(`Catalog integrity failure: expected 1009 tools, found ${tools.length}`);
+const categories=[...new Map(tools.map(t=>[t.category,{slug:t.category,name:t.categoryName,count:0}])).values()];
+for(const t of tools)categories.find(c=>c.slug===t.category).count++;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const BASE=process.env.SITE_BASE||'/';
+const abs=p=>`${BASE}${p}`.replace(/\/+/g,'/');
+const nav=`<header class="site-header"><a class="brand" href="${abs('')}" aria-label="Zero Trust home"><span class="brand-mark" aria-hidden="true">ZT</span><span class="brand-name">Zero Trust</span></a><nav><details class="nav-menu"><summary>Tools</summary><div class="mega-menu"><a href="${abs('tools/')}">All ${tools.length} tools</a>${categories.map(c=>`<a href="${abs(`tools/category/${c.slug}/`)}">${esc(c.name)}</a>`).join('')}</div></details><a class="nav-link" href="${abs('tools/')}">Search</a><a class="nav-link" href="${abs('security/')}">Security</a><button id="themeBtn" class="icon-btn" type="button">Dark</button><button id="menuBtn" class="icon-btn mobile-menu" type="button" aria-expanded="false">Menu</button></nav><div id="mobileNav" class="mega-menu" hidden><a href="${abs('tools/')}">All tools</a>${categories.map(c=>`<a href="${abs(`tools/category/${c.slug}/`)}">${esc(c.name)}</a>`).join('')}</div></header>`;
+const footer=`<footer><span>© 2026 Zero Trust</span><span><a href="${abs('privacy/')}">Privacy</a> · <a href="${abs('security/')}">Security</a> · <a href="${abs('accessibility/')}">Accessibility</a></span></footer>`;
+const shell=(title,description,body,canonical)=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title><meta name="description" content="${esc(description)}"><meta name="robots" content="index,follow"><link rel="canonical" href="${abs(canonical)}"><link rel="stylesheet" href="${abs('styles.css')}"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:type" content="website"><script type="application/ld+json">${JSON.stringify({'@context':'https://schema.org','@type':'SoftwareApplication',name:title,applicationCategory:'UtilitiesApplication',operatingSystem:'Any',description})}</script></head><body>${nav}<main>${body}</main>${footer}<script src="${abs('app.js?v=301')}" defer></script><script type="module" src="${abs('tool-engine.js?v=301')}"></script></body></html>`;
+const write=(rel,html)=>{const f=path.join(root,rel);fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,html)};
+const card=t=>`<a class="tool-card" href="${abs(`tools/${t.slug}/`)}"><span class="eyebrow">${esc(t.categoryName)}</span><h3>${esc(t.name)}</h3><p>Real browser tool · ${t.phase===1?'local-first':'network-dependent capability'}</p></a>`;
+for(const t of tools){
+ const related=tools.filter(x=>x.category===t.category&&x.slug!==t.slug).slice(0,6);
+ const desc=`${t.name}: a practical Zero Trust browser utility. Process supported input locally when technically possible, review the result, and download or copy the output.`;
+ const body=`<section class="tool-shell"><div class="breadcrumbs"><a href="${abs('tools/')}">All tools</a> / <a href="${abs(`tools/category/${t.category}/`)}">${esc(t.categoryName)}</a> / ${esc(t.name)}</div><div class="eyebrow">${esc(t.categoryName).toUpperCase()}</div><h1 id="toolTitle">${esc(t.name)}</h1><p id="toolDesc">${esc(desc)}</p><div class="privacy-badge">${t.phase===1?'LOCAL-FIRST — INPUT STAYS IN THIS BROWSER':'NETWORK CAPABILITY — REQUESTS ARE DISCLOSED'}</div><div id="toolApp" data-engine="${esc(t.engine)}"></div><section class="content-section"><h2>How to use</h2><ol><li>Provide the input requested by the tool.</li><li>Run the operation and inspect the result.</li><li>Download or copy the result when it is correct.</li></ol><h2>Privacy</h2><p>${t.phase===1?'This tool is designed for local browser processing. Your input is not uploaded by the page as part of the core operation.':'This tool may require network access. The interface identifies that requirement before the operation.'}</p><h2>FAQ</h2><h3>Is this tool free?</h3><p>Yes. The page is available without an account.</p><h3>Are my files uploaded?</h3><p>Client-side tools process files in this browser. Network-dependent tools are identified.</p><h3>How do I use it?</h3><p>Provide the requested input, run the operation, then review or download the result.</p></section></section><section class="section related-section"><div class="section-head"><div><div class="eyebrow">RELATED</div><h2>More ${esc(t.categoryName)}</h2></div><a href="${abs(`tools/category/${t.category}/`)}">View category</a></div><div class="tool-grid">${related.map(card).join('')}</div></section>`;
+ write(`tools/${t.slug}/index.html`,shell(`${t.name} — Zero Trust`,desc,body,`tools/${t.slug}/`));
 }
-for(const cat of categories){
- const items=tools.filter(t=>t[2]===cat);
- const body=`<section class="page"><div class="eyebrow">CATEGORY</div><h1>${esc(cat[0].toUpperCase()+cat.slice(1))} tools</h1><p>Browse ${items.length} privacy-first ${esc(cat)} tools. Search is instant and each tool has its own documentation, metadata and related links.</p><div class="tool-grid">${items.map(t=>`<a class="tool-card" href="${base}tools/${t[0]}/"><span class="eyebrow">${esc(cat)}</span><h3>${esc(t[1])}</h3><p>Private browser-based utility.</p></a>`).join('')}</div></section>`;
- write(`tools/category/${cat}/index.html`,shell(`${cat} tools — Zero Trust`,`Browse ${items.length} ${cat} tools from Zero Trust.`,body,`tools/category/${cat}/`));
-}
-const robots=`User-agent: *\nAllow: /\nSitemap: https://piyarebackend.github.io/Zero-trust/sitemap.xml\n`;
-write('robots.txt',robots);
-const sitemap=['https://piyarebackend.github.io/Zero-trust/','https://piyarebackend.github.io/Zero-trust/tools/'];
-for(const [slug] of tools)sitemap.push(`https://piyarebackend.github.io/Zero-trust/tools/${slug}/`);
-for(const cat of categories)sitemap.push(`https://piyarebackend.github.io/Zero-trust/tools/category/${cat}/`);
-write('sitemap.xml',`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${sitemap.map(u=>`<url><loc>${u}</loc></url>`).join('')}</urlset>`);
-console.log(`Generated catalogue for ${tools.length} tools and ${categories.length} categories.`);
+for(const c of categories){const items=tools.filter(t=>t.category===c.slug);const body=`<section class="page"><div class="eyebrow">CATEGORY</div><h1>${esc(c.name)}</h1><p>${c.count} tools in this category, with static HTML content and browser runtime enhancement.</p><div class="tool-grid">${items.map(card).join('')}</div></section>`;write(`tools/category/${c.slug}/index.html`,shell(`${c.name} — Zero Trust`,`Browse ${c.count} ${c.name} tools.`, `tools/category/${c.slug}/`))}
+const indexBody=`<section class="page"><div class="eyebrow">ZERO TRUST TOOL DIRECTORY</div><h1>All ${tools.length} tools</h1><p>Search and filter the complete directory. Every entry has a real tool page and a declared processing engine.</p><div class="tool-filters"><input class="tools-search" id="toolSearch" placeholder="Search tools…" autocomplete="off"><select class="tools-search" id="categoryFilter"><option value="">All categories</option>${categories.map(c=>`<option value="${esc(c.slug)}">${esc(c.name)}</option>`).join('')}</select></div><div class="small" id="toolCount">${tools.length} tools</div><div class="tool-grid" id="allTools">${tools.map(card).join('')}</div></section>`;
+write('index.html',shell('Zero Trust — Private Browser Tools',`${tools.length} privacy-first browser tools for files, text, data, developer workflows and calculations.`,indexBody,''));
+write('tools/index.html',shell(`All ${tools.length} tools — Zero Trust`,`Browse all ${tools.length} Zero Trust browser tools.`,indexBody,'tools/'));
+const homeBody=`<section class="hero"><div class="eyebrow">PRIVATE BY DEFAULT · LOCAL-FIRST · NO ACCOUNT</div><h1>Your everyday tools.<br><span>Without sending your files away.</span></h1><p>Real browser utilities for documents, images, data, code, text and more. Input stays local for client-side tools whenever technically possible.</p><div class="hero-actions"><a class="btn primary" href="${abs('tools/')}">Explore ${tools.length} tools</a><a class="btn" href="${abs('tools/category/pdf-utility-tools/')}">Open PDF tools</a></div><div class="status">Local-first processing where supported.</div></section><section class="section"><div class="section-head"><div><div class="eyebrow">START HERE</div><h2>Useful tools, zero clutter.</h2></div><a href="${abs('tools/')}">View all</a></div><div class="tool-grid">${tools.slice(0,12).map(card).join('')}</div></section><section class="section"><div class="section-head"><div><div class="eyebrow">CATEGORIES</div><h2>Find the right tool.</h2></div></div><div class="tool-grid">${categories.map(c=>`<a class="tool-card" href="${abs(`tools/category/${c.slug}/`)}"><span class="eyebrow">${c.count} tools</span><h3>${esc(c.name)}</h3><p>Browse the complete category.</p></a>`).join('')}</div></section>`;
+write('index.html',shell('Zero Trust — Private Browser Tools',`${tools.length} privacy-first browser tools for files, text, data, developer workflows and calculations.`,homeBody,''));
+write('data/tools-index.json',JSON.stringify(tools));
+write('data/categories.json',JSON.stringify(categories));
+write('robots.txt',`User-agent: *\nAllow: /\nSitemap: ${abs('sitemap.xml')}\n`);
+const urls=[abs(''),abs('tools/'),...tools.map(t=>abs(`tools/${t.slug}/`)),...categories.map(c=>abs(`tools/category/${c.slug}/`))];
+write('sitemap.xml',`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u=>`<url><loc>${u}</loc></url>`).join('')}</urlset>`);
+console.log(`Generated ${tools.length} tool pages, ${categories.length} category pages.`);
