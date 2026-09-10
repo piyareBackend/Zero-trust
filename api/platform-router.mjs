@@ -1,10 +1,124 @@
 import app from './worker.mjs';
-const enc=new TextEncoder();const now=()=>new Date().toISOString();const id=()=>crypto.randomUUID();const bytes=n=>crypto.getRandomValues(new Uint8Array(n));const b64=a=>btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');const hash=async s=>b64(new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(s))));
-const json=(d,status=200,headers={})=>new Response(JSON.stringify(d),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...headers}});
-const cookies=r=>Object.fromEntries((r.headers.get('Cookie')||'').split(';').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return[decodeURIComponent(x.slice(0,i)),decodeURIComponent(x.slice(i+1))]}));
-async function session(req,env){const raw=cookies(req).zt_session;if(!raw||!env.DB)return null;return env.DB.prepare('SELECT s.*,u.email,u.role,u.plan,u.status FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(raw),now()).first()}
-async function profile(req,env){const s=await session(req,env);if(!s)return json({error:'Authentication required'},401);if(req.method==='GET'){const p=await env.DB.prepare('SELECT * FROM profiles WHERE user_id=?').bind(s.user_id).first();return json({profile:p||{user_id:s.user_id,onboarding_complete:0,locale:'en-IN',timezone:'UTC'}})}const csrf=req.headers.get('x-csrf-token');if(csrf!==s.csrf_token)return json({error:'CSRF validation failed'},403);let b;try{b=await req.json()}catch{return json({error:'Invalid JSON'},400)};const fields={first_name:String(b.first_name||'').trim(),last_name:String(b.last_name||'').trim(),display_name:String(b.display_name||'').trim(),country:String(b.country||'').trim(),timezone:String(b.timezone||'UTC').trim(),locale:String(b.locale||'en-IN').trim(),phone:String(b.phone||'').trim(),marketing_opt_in:b.marketing_opt_in?1:0};if(fields.first_name.length>80||fields.last_name.length>80||fields.display_name.length>100||fields.country.length>80||fields.timezone.length>80||fields.locale.length>20||fields.phone.length>30)return json({error:'One or more profile fields are too long'},400);const z=now();await env.DB.prepare(`INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,phone,marketing_opt_in,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,1,?) ON CONFLICT(user_id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,display_name=excluded.display_name,country=excluded.country,timezone=excluded.timezone,locale=excluded.locale,phone=excluded.phone,marketing_opt_in=excluded.marketing_opt_in,onboarding_complete=1,updated_at=excluded.updated_at`).bind(s.user_id,fields.first_name,fields.last_name,fields.display_name,fields.country,fields.timezone,fields.locale,fields.phone,fields.marketing_opt_in,z).run();return json({ok:true})}
-async function googleStart(req,env){if(!env.DB||!env.GOOGLE_CLIENT_ID)return json({error:'Google sign-in is not configured yet'},503);const u=new URL(req.url),redirectPath='/account/';const state=b64(bytes(32));await env.DB.prepare('INSERT INTO oauth_states(state_hash,provider,redirect_path,expires_at,created_at,ip_hash) VALUES(?,?,?,?,?,?)').bind(await hash(state),'google',redirectPath,new Date(Date.now()+10*60e3).toISOString(),now(),await hash(req.headers.get('CF-Connecting-IP')||'unknown')).run();const callback=new URL('/api/auth/google/callback',u.origin).toString();const p=new URLSearchParams({client_id:env.GOOGLE_CLIENT_ID,redirect_uri:callback,response_type:'code',scope:'openid email profile',state,access_type:'online',prompt:'select_account'});return Response.redirect('https://accounts.google.com/o/oauth2/v2/auth?'+p.toString(),302)}
-async function googleCallback(req,env){if(!env.DB||!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)return new Response('Google sign-in is not configured.',{status:503});const u=new URL(req.url),code=u.searchParams.get('code'),state=u.searchParams.get('state'),err=u.searchParams.get('error');if(err)return Response.redirect(new URL('/login/?oauth=cancelled',u.origin),302);if(!code||!state)return new Response('Invalid OAuth response.',{status:400});const st=await env.DB.prepare('SELECT * FROM oauth_states WHERE state_hash=? AND provider=\'google\' AND expires_at>?').bind(await hash(state),now()).first();await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash=?').bind(await hash(state)).run();if(!st)return new Response('OAuth session expired. Start again.',{status:400});const callback=new URL('/api/auth/google/callback',u.origin).toString();const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:callback,grant_type:'authorization_code'})});if(!tokenRes.ok)return new Response('Google authorization failed.',{status:401});const tok=await tokenRes.json();const infoRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{authorization:`Bearer ${tok.access_token}`}});if(!infoRes.ok)return new Response('Google account verification failed.',{status:401});const info=await infoRes.json();if(!info.sub||!info.email||info.email_verified!==true)return new Response('A verified Google account is required.',{status:403});const email=String(info.email).toLowerCase();let identity=await env.DB.prepare('SELECT user_id FROM oauth_identities WHERE provider=\'google\' AND provider_user_id=?').bind(info.sub).first();let user=identity?await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(identity.user_id).first():await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();if(user?.status!=='active')return new Response('Account is not active.',{status:403});if(!user){const dummy=b64(bytes(32)),salt=b64(bytes(16)),z=now();user={id:id(),email,role:'user',plan:'free',status:'active'};await env.DB.prepare('INSERT INTO users(id,email,password_hash,password_salt,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(user.id,email,dummy,salt,'user','free','active',z,z).run();await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,avatar_url,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(user.id,String(info.given_name||''),String(info.family_name||''),String(info.name||''),'','UTC','en-IN',String(info.picture||''),0,z).run()}else{await env.DB.prepare('UPDATE users SET last_login_at=?,updated_at=? WHERE id=?').bind(now(),now(),user.id).run();await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,avatar_url,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET avatar_url=COALESCE(excluded.avatar_url,profiles.avatar_url),updated_at=excluded.updated_at').bind(user.id,String(info.given_name||''),String(info.family_name||''),String(info.name||''),String(info.picture||''),0,now()).run()}await env.DB.prepare('INSERT INTO oauth_identities(provider,provider_user_id,user_id,email,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(provider,provider_user_id) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at').bind('google',info.sub,user.id,email,now(),now()).run();const raw=b64(bytes(32)),csrf=b64(bytes(24)),z=now(),expires=new Date(Date.now()+7*86400000).toISOString();await env.DB.prepare('INSERT INTO sessions(id,user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at,user_agent,ip_hash) VALUES(?,?,?,?,?,?,?,?,?)').bind(id(),user.id,await hash(raw),csrf,z,expires,z,req.headers.get('User-Agent')||'',await hash(req.headers.get('CF-Connecting-IP')||'unknown')).run();return new Response(null,{status:302,headers:{location:new URL('/account/?welcome=google',u.origin).toString(),'set-cookie':`zt_session=${encodeURIComponent(raw)}; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Strict`}})}
-async function signup(req,env){if(!env.DB)return json({error:'Account service is not configured yet'},503);let b;try{b=await req.clone().json()}catch{return app.fetch(req,env)}const required=['first_name','last_name','country','timezone'];for(const k of required)if(typeof b[k]!=='string'||!b[k].trim())return json({error:`${k.replace('_',' ')} is required`},400);if(b.terms_accepted!==true||b.privacy_accepted!==true)return json({error:'Terms and Privacy acceptance are required'},400);const r=await app.fetch(req,env);if(!r.ok)return r;const email=String(b.email).trim().toLowerCase(),u=await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();if(u){const z=now();await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,phone,marketing_opt_in,terms_accepted_at,privacy_accepted_at,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,display_name=excluded.display_name,country=excluded.country,timezone=excluded.timezone,locale=excluded.locale,phone=excluded.phone,marketing_opt_in=excluded.marketing_opt_in,terms_accepted_at=excluded.terms_accepted_at,privacy_accepted_at=excluded.privacy_accepted_at,onboarding_complete=1,updated_at=excluded.updated_at`).bind(u.id,b.first_name.trim(),b.last_name.trim(),String(b.display_name||`${b.first_name.trim()} ${b.last_name.trim()}`).trim(),b.country.trim(),b.timezone.trim(),String(b.locale||'en-IN'),String(b.phone||'').trim(),b.marketing_opt_in?1:0,z,z,1,z).run()}return r}
-export default{async fetch(req,env,ctx){const p=new URL(req.url).pathname.replace(/^\/Zero-trust/,'');if(p==='/api/auth/google/start'&&req.method==='GET')return googleStart(req,env);if(p==='/api/auth/google/callback'&&req.method==='GET')return googleCallback(req,env);if(p==='/api/auth/signup'&&req.method==='POST')return signup(req,env);if(p==='/api/account/profile'&&(req.method==='GET'||req.method==='PATCH'))return profile(req,env);return app.fetch(req,env)}};
+
+const enc = new TextEncoder();
+const now = () => new Date().toISOString();
+const makeId = () => crypto.randomUUID();
+const random = n => crypto.getRandomValues(new Uint8Array(n));
+const b64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+const hash = async value => b64(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(value))));
+const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
+const cookies = req => Object.fromEntries((req.headers.get('Cookie') || '').split(';').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf('='); return [decodeURIComponent(x.slice(0, i)), decodeURIComponent(x.slice(i + 1))]; }));
+
+async function getSession(req, env) {
+  const raw = cookies(req).zt_session;
+  if (!raw || !env.DB) return null;
+  return env.DB.prepare('SELECT s.*,u.email,u.role,u.plan,u.status FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(await hash(raw), now()).first();
+}
+
+async function createSession(req, env, userId) {
+  const raw = b64(random(32));
+  const csrf = b64(random(24));
+  const created = now();
+  const expires = new Date(Date.now() + 7 * 86400000).toISOString();
+  await env.DB.prepare('INSERT INTO sessions(id,user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at,user_agent,ip_hash) VALUES(?,?,?,?,?,?,?,?,?)').bind(makeId(), userId, await hash(raw), csrf, created, expires, created, req.headers.get('User-Agent') || '', await hash(req.headers.get('CF-Connecting-IP') || 'unknown')).run();
+  return json({ ok: true, csrfToken: csrf }, 200, { 'set-cookie': `zt_session=${encodeURIComponent(raw)}; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Strict` });
+}
+
+async function profile(req, env) {
+  const s = await getSession(req, env);
+  if (!s) return json({ error: 'Authentication required' }, 401);
+  if (req.method === 'GET') {
+    const p = await env.DB.prepare('SELECT * FROM profiles WHERE user_id=?').bind(s.user_id).first();
+    return json({ profile: p || { user_id: s.user_id, onboarding_complete: 0, locale: 'en-IN', timezone: 'UTC' } });
+  }
+  if (req.headers.get('x-csrf-token') !== s.csrf_token) return json({ error: 'CSRF validation failed' }, 403);
+  const b = await req.json().catch(() => null);
+  if (!b) return json({ error: 'Invalid JSON' }, 400);
+  const f = {
+    first: String(b.first_name || '').trim(), last: String(b.last_name || '').trim(), display: String(b.display_name || '').trim(),
+    country: String(b.country || '').trim(), timezone: String(b.timezone || 'UTC').trim(), locale: String(b.locale || 'en-IN').trim(),
+    phone: String(b.phone || '').trim(), marketing: b.marketing_opt_in ? 1 : 0
+  };
+  if (!f.first || !f.last || !f.country || !f.timezone) return json({ error: 'First name, last name, country and timezone are required' }, 400);
+  if (f.first.length > 80 || f.last.length > 80 || f.display.length > 100 || f.country.length > 80 || f.timezone.length > 80 || f.locale.length > 20 || f.phone.length > 30) return json({ error: 'One or more profile fields are too long' }, 400);
+  const z = now();
+  const existing = await env.DB.prepare('SELECT user_id FROM profiles WHERE user_id=?').bind(s.user_id).first();
+  if (existing) {
+    await env.DB.prepare('UPDATE profiles SET first_name=?,last_name=?,display_name=?,country=?,timezone=?,locale=?,phone=?,marketing_opt_in=?,onboarding_complete=1,updated_at=? WHERE user_id=?').bind(f.first, f.last, f.display || `${f.first} ${f.last}`, f.country, f.timezone, f.locale, f.phone, f.marketing, z, s.user_id).run();
+  } else {
+    await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,phone,marketing_opt_in,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)').bind(s.user_id, f.first, f.last, f.display || `${f.first} ${f.last}`, f.country, f.timezone, f.locale, f.phone, f.marketing, z).run();
+  }
+  return json({ ok: true });
+}
+
+async function signup(req, env) {
+  if (!env.DB) return json({ error: 'Account service is not configured yet' }, 503);
+  const b = await req.clone().json().catch(() => null);
+  if (!b) return json({ error: 'Invalid JSON' }, 400);
+  for (const key of ['first_name', 'last_name', 'country', 'timezone']) if (typeof b[key] !== 'string' || !b[key].trim()) return json({ error: `${key.replace('_', ' ')} is required` }, 400);
+  if (b.terms_accepted !== true || b.privacy_accepted !== true) return json({ error: 'Terms and Privacy acceptance are required' }, 400);
+  const response = await app.fetch(req, env);
+  if (!response.ok) return response;
+  const email = String(b.email || '').trim().toLowerCase();
+  const user = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
+  if (!user) return response;
+  const z = now();
+  const values = [user.id, b.first_name.trim(), b.last_name.trim(), String(b.display_name || `${b.first_name.trim()} ${b.last_name.trim()}`).trim(), b.country.trim(), b.timezone.trim(), String(b.locale || 'en-IN'), String(b.phone || '').trim(), b.marketing_opt_in ? 1 : 0, z, z, z];
+  await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,phone,marketing_opt_in,terms_accepted_at,privacy_accepted_at,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,1,?) ON CONFLICT(user_id) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,display_name=excluded.display_name,country=excluded.country,timezone=excluded.timezone,locale=excluded.locale,phone=excluded.phone,marketing_opt_in=excluded.marketing_opt_in,terms_accepted_at=excluded.terms_accepted_at,privacy_accepted_at=excluded.privacy_accepted_at,onboarding_complete=1,updated_at=excluded.updated_at').bind(...values).run();
+  return response;
+}
+
+async function googleStart(req, env) {
+  if (!env.DB || !env.GOOGLE_CLIENT_ID) return json({ error: 'Google sign-in is not configured yet' }, 503);
+  const origin = new URL(req.url).origin;
+  const state = b64(random(32));
+  await env.DB.prepare('INSERT INTO oauth_states(state_hash,provider,redirect_path,expires_at,created_at,ip_hash) VALUES(?,?,?,?,?,?)').bind(await hash(state), 'google', '/account/', new Date(Date.now() + 10 * 60 * 1000).toISOString(), now(), await hash(req.headers.get('CF-Connecting-IP') || 'unknown')).run();
+  const callback = `${origin}/api/auth/google/callback`;
+  const params = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: callback, response_type: 'code', scope: 'openid email profile', state, access_type: 'online', prompt: 'select_account' });
+  return Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, 302);
+}
+
+async function googleCallback(req, env) {
+  if (!env.DB || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return new Response('Google sign-in is not configured.', { status: 503 });
+  const url = new URL(req.url); const code = url.searchParams.get('code'); const state = url.searchParams.get('state');
+  if (url.searchParams.get('error')) return Response.redirect(new URL('/login/?oauth=cancelled', url.origin), 302);
+  if (!code || !state) return new Response('Invalid OAuth response.', { status: 400 });
+  const stateRow = await env.DB.prepare('SELECT * FROM oauth_states WHERE state_hash=? AND provider=? AND expires_at>?').bind(await hash(state), 'google', now()).first();
+  await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash=?').bind(await hash(state)).run();
+  if (!stateRow) return new Response('OAuth session expired. Start again.', { status: 400 });
+  const callback = `${url.origin}/api/auth/google/callback`;
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: callback, grant_type: 'authorization_code' }) });
+  if (!tokenResponse.ok) return new Response('Google authorization failed.', { status: 401 });
+  const tokens = await tokenResponse.json();
+  const infoResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${tokens.access_token}` } });
+  if (!infoResponse.ok) return new Response('Google account verification failed.', { status: 401 });
+  const info = await infoResponse.json();
+  if (!info.sub || !info.email || info.email_verified !== true) return new Response('A verified Google account is required.', { status: 403 });
+  const email = String(info.email).toLowerCase();
+  const identity = await env.DB.prepare('SELECT user_id FROM oauth_identities WHERE provider=? AND provider_user_id=?').bind('google', info.sub).first();
+  let user = identity ? await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(identity.user_id).first() : await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
+  if (user && user.status !== 'active') return new Response('Account is not active.', { status: 403 });
+  const z = now();
+  if (!user) {
+    user = { id: makeId(), email, role: 'user', plan: 'free', status: 'active' };
+    await env.DB.prepare('INSERT INTO users(id,email,password_hash,password_salt,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(user.id, email, b64(random(32)), b64(random(16)), 'user', 'free', 'active', z, z).run();
+    await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,country,timezone,locale,avatar_url,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(user.id, String(info.given_name || ''), String(info.family_name || ''), String(info.name || ''), '', 'UTC', 'en-IN', String(info.picture || ''), 0, z).run();
+  } else {
+    await env.DB.prepare('UPDATE users SET last_login_at=?,updated_at=? WHERE id=?').bind(z, z, user.id).run();
+    await env.DB.prepare('INSERT INTO profiles(user_id,first_name,last_name,display_name,avatar_url,onboarding_complete,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET avatar_url=excluded.avatar_url,updated_at=excluded.updated_at').bind(user.id, String(info.given_name || ''), String(info.family_name || ''), String(info.name || ''), String(info.picture || ''), 0, z).run();
+  }
+  await env.DB.prepare('INSERT INTO oauth_identities(provider,provider_user_id,user_id,email,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(provider,provider_user_id) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at').bind('google', info.sub, user.id, email, z, z).run();
+  const sessionResponse = await createSession(req, env, user.id);
+  return new Response(null, { status: 302, headers: { location: new URL('/account/?welcome=google', url.origin).toString(), 'set-cookie': sessionResponse.headers.get('set-cookie') } });
+}
+
+export default {
+  async fetch(req, env, ctx) {
+    const p = new URL(req.url).pathname.replace(/^\/Zero-trust/, '');
+    if (p === '/api/auth/google/start' && req.method === 'GET') return googleStart(req, env);
+    if (p === '/api/auth/google/callback' && req.method === 'GET') return googleCallback(req, env);
+    if (p === '/api/auth/signup' && req.method === 'POST') return signup(req, env);
+    if (p === '/api/account/profile' && (req.method === 'GET' || req.method === 'PATCH')) return profile(req, env);
+    return app.fetch(req, env, ctx);
+  }
+};
