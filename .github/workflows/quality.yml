@@ -16,6 +16,7 @@ jobs:
           node --check scripts/build-pages.mjs
           node --check scripts/build-cloudflare.mjs
           node --check scripts/merge-legacy-pages.mjs
+          node --check scripts/enhance-nav.mjs
           node --check tests/legacy-smoke.mjs
           node --check engines/free/universal.js
           node --check engines/free/extended.js
@@ -23,16 +24,17 @@ jobs:
           node --check data/catalog.mjs
           node --check data/catalog-combined.mjs
           node --check data/legacy-tools.mjs
+          node --check data/legacy-500-plus.mjs
       - name: Catalog integrity
-        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==200||CATALOG.length<1009||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
+        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length<1009||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
       - name: Build complete static site
         run: |
           rm -rf dist
           OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
           cp styles.css app.js tool-engine.js manifest.json sw.js 404.html _headers _redirects dist/
           cp -r engines dist/engines
-          node scripts/merge-legacy-pages.mjs
-          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$(node --input-type=module -e \"import { CATALOG } from './data/catalog-combined.mjs'; process.stdout.write(String(CATALOG.length))\")"
+          SITE_BASE=/ node scripts/merge-legacy-pages.mjs
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$(node --input-type=module -e "import { CATALOG } from './data/catalog-combined.mjs'; process.stdout.write(String(CATALOG.length))")"
           test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
       - name: Static page integrity
         run: |
@@ -43,6 +45,8 @@ jobs:
           test -f dist/tools/pdf-page-counter/index.html
           grep -q 'Real browser tool' dist/tools/jpg-to-png-converter/index.html
           grep -q 'id="toolApp"' dist/tools/pdf-page-counter/index.html
+          grep -q 'Quick tools' dist/index.html
+          grep -q 'hamburger' dist/index.html
       - name: Browser smoke + privacy test
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
