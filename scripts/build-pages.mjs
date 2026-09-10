@@ -24,6 +24,10 @@ const patchExisting=(file,title,description,canonical)=>{
  setTag(/<link\s+rel=["']canonical["'][^>]*>/i,`<link rel="canonical" href="${base}${canonical}">`);
  if(!/<script\s+type=["']application\/ld\+json["']/i.test(html))html=html.replace(/<\/head>/i,`<script type="application/ld+json">${JSON.stringify({'@context':'https://schema.org','@type':'WebApplication',name:title,applicationCategory:'UtilitiesApplication',operatingSystem:'Any',description})}</script></head>`);
  if(!html.includes(`${base}app.js`))html=html.replace(/<\/body>/i,`<script src="${base}app.js?v=204" defer></script></body>`);
+ // Existing hand-authored pages keep their specialized UI. Add the stable
+ // selectors required by the shared runtime instead of replacing that UI.
+ if(!/<h1[^>]*\bid=["']toolTitle["']/i.test(html))html=html.replace(/<h1(?![^>]*\bid=)/i,'<h1 id="toolTitle"');
+ if(!/<p[^>]*\bid=["']toolDesc["']/i.test(html))html=html.replace(/<p(?![^>]*\bid=)/i,'<p id="toolDesc"');
  fs.writeFileSync(file,html);
 };
 
@@ -34,12 +38,8 @@ for(const [slug,name,cat] of tools){
  const body=`<section class="tool-shell"><div class="breadcrumbs"><a href="${base}tools/">All tools</a> / <a href="${base}tools/category/${cat}/">${esc(cat)}</a> / ${esc(name)}</div><div class="eyebrow">${esc(cat).toUpperCase()} TOOL</div><h1 id="toolTitle">${esc(name)}</h1><p id="toolDesc">${esc(desc)}</p><span class="privacy-badge">LOCAL-FIRST WHEN SUPPORTED</span><div id="toolApp"></div><section class="content-section"><h2>How to use ${esc(name)}</h2><ol><li>Choose the input required by this tool.</li><li>Run the operation in your browser.</li><li>Review the result and download it when ready.</li></ol><h2>Privacy and file handling</h2><p>Zero Trust is designed around local-first processing. Network-dependent capabilities are disclosed in the tool interface.</p><h2>Frequently asked questions</h2>${faq.map(q=>`<h3>${esc(q)}</h3><p>The tool page explains the supported operation and processing mode before you run it.</p>`).join('')}</section></section><section class="section related-section"><div class="section-head"><div><div class="eyebrow">RELATED TOOLS</div><h2>More ${esc(cat)} tools</h2></div><a href="${base}tools/category/${cat}/">View category</a></div><div class="tool-grid">${related.map(t=>`<a class="tool-card" href="${base}tools/${t[0]}/"><span class="eyebrow">${esc(t[2])}</span><h3>${esc(t[1])}</h3><p>Private browser-based utility.</p></a>`).join('')}</div></section>`;
  const faqSchema={'@context':'https://schema.org','@type':'FAQPage',mainEntity:faq.map(q=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:'See the tool instructions and processing details on this page.'}}))};
  const file=path.join(root,`tools/${slug}/index.html`);
- if(fs.existsSync(file)){
-   patchExisting(file,`${name} — Zero Trust`,desc,`tools/${slug}/`);
- }else{
-   const html=shell(`${name} — Zero Trust`,desc,body,`tools/${slug}/`).replace('</head>',`<script type="application/ld+json">${JSON.stringify(faqSchema)}</script></head>`);
-   write(`tools/${slug}/index.html`,html);
- }
+ if(fs.existsSync(file))patchExisting(file,`${name} — Zero Trust`,desc,`tools/${slug}/`);
+ else write(`tools/${slug}/index.html`,shell(`${name} — Zero Trust`,desc,body,`tools/${slug}/`).replace('</head>',`<script type="application/ld+json">${JSON.stringify(faqSchema)}</script></head>`));
 }
 for(const cat of categories){
  const items=tools.filter(t=>t[2]===cat);
