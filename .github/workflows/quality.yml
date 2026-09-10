@@ -34,6 +34,11 @@ jobs:
           node --input-type=module -e "import fs from 'node:fs'; import vm from 'node:vm'; const ctx={window:{},document:{addEventListener(){}}}; vm.runInNewContext(fs.readFileSync('app.js','utf8'),ctx); const n=ctx.window.ZT_TOOLS.length; console.log('tools='+n); if(n<500) process.exit(1)"
       - name: SEO page generator
         run: node scripts/build-pages.mjs
+      - name: Normalize physical tool bootstraps
+        run: |
+          find tools -type f -name index.html -print0 | while IFS= read -r -d '' f; do
+            sed -i -E 's#<script src="/Zero-trust/tool-engine\.js\?v=[^"]+" defer></script>#<script src="/Zero-trust/app.js?v=204" defer></script>#g' "$f"
+          done
       - name: Tool engine coverage
         run: |
           test -f engines/free/generic.js
