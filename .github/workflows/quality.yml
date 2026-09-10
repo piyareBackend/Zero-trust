@@ -48,4 +48,4 @@ jobs:
           (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
-          node tests/smoke.mjs
+          SITE_ROOT=dist node tests/smoke.mjs
