@@ -1,0 +1,51 @@
+name: Zero Trust Quality
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JavaScript syntax
+        run: |
+          node --check app.js
+          node --check tool-engine.js
+          node --check scripts/build-pages.mjs
+          node --check engines/free/universal.js
+          node --check engines/free/extended.js
+          node --check engines/free/pdf-universal.js
+          node --check data/catalog.mjs
+      - name: Catalog integrity
+        run: |
+          node --input-type=module -e "import { CATALOG } from './data/catalog.mjs'; console.log('catalog='+CATALOG.length); if(CATALOG.length!==1009) process.exit(1); if(new Set(CATALOG.map(x=>x.slug)).size!==1009) process.exit(1)"
+      - name: Build complete static site
+        run: |
+          rm -rf dist
+          OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 1009
+          test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
+      - name: Static page integrity
+        run: |
+          cp styles.css app.js tool-engine.js manifest.json sw.js 404.html _headers _redirects dist/
+          cp -r engines dist/engines
+          test -f dist/index.html
+          test -f dist/tools/index.html
+          test -f dist/styles.css
+          grep -q 'Real browser tool' dist/tools/jpg-to-png-converter/index.html
+          grep -q 'id="toolApp"' dist/tools/pdf-page-counter/index.html
+          grep -q '1009' dist/tools/index.html
+      - name: Browser smoke + privacy test
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright@1.55.0 install --with-deps chromium
+          cat > /tmp/zt-server.py <<'PY'
+          from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
+          ThreadingHTTPServer(('127.0.0.1',4173),SimpleHTTPRequestHandler).serve_forever()
+          PY
+          (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/smoke.mjs
