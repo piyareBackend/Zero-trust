@@ -35,7 +35,7 @@ jobs:
           find dist/tools -name index.html -print0 | xargs -0 sed -i 's#</head>#<link rel="stylesheet" href="/tool-page.css">\n</head>#g'
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
           test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
-          test "$(find dist/tools/category -mindepth 3 -maxdepth 3 -name index.html | wc -l)" -eq 25
+          test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
       - name: Static page integrity
         run: |
           test -f dist/index.html; test -f dist/tools/index.html; test -f dist/styles.css; test -f dist/tool-page.css; test -f dist/tools/jpg-to-png-converter/index.html; test -f dist/tools/pdf-page-counter/index.html
