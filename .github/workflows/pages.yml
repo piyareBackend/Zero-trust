@@ -39,6 +39,7 @@ jobs:
       - name: Build GitHub Pages artifact
         if: env.CF_CONFIGURED != 'true'
         run: |
+          set -e
           rm -rf dist
           OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/build-pages.mjs
           cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _headers _redirects dist/
@@ -50,7 +51,7 @@ jobs:
         run: |
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
           test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
-          test "$(find dist/tools/category -mindepth 3 -maxdepth 3 -name index.html | wc -l)" -eq 25
+          test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
           test -f dist/index.html; test -f dist/data/tools-index.json; test -f dist/tool-page.css; test -f dist/login/index.html; test -f dist/signup/index.html; test -f dist/account/index.html; test -f dist/owner/index.html; test -f dist/pricing/index.html
           grep -q 'Quick tools' dist/index.html; grep -q 'hamburger' dist/index.html; grep -q 'Continue with Google' dist/login/index.html; grep -q '/Zero-trust/tool-page.css' dist/tools/jpg-to-png-converter/index.html
       - name: Prepare Cloudflare Worker + existing production D1
