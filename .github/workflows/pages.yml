@@ -47,6 +47,7 @@ jobs:
           SITE_BASE=/Zero-trust/ node scripts/merge-legacy-pages.mjs
           OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/enhance-platform.mjs
           OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/optimize-tool-pages.mjs
+          find dist/tools -name index.html -print0 | xargs -0 sed -i 's#</head>#<link rel="stylesheet" href="/Zero-trust/tool-page.css">\n</head>#g'
       - name: Verify combined artifact
         run: |
           set -euo pipefail
