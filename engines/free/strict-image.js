@@ -2,10 +2,6 @@ import { mountRealTool } from './real-tools.js';
 import { mount as mountIndividual } from './individual-tools.js';
 const exact=new Set(['resize image (pixels)','compress jpg','compress png','compress webp','rotate image','flip image','add watermark to image','circle crop for profile picture','image border adder','image flip vertical/horizontal']);
 const converters=/^(jpg|png|webp|gif|bmp|svg) to (jpg|png|webp) converter$/i;
-export async function mount(slug){
- let tools=window.ZT_TOOLS;
- if(!tools){const base=location.pathname.startsWith('/Zero-trust/')?'/Zero-trust/':'/';tools=await fetch(base+'data/tools-index.json',{cache:'force-cache'}).then(r=>r.json());window.ZT_TOOLS=tools}
- const meta=(tools||[]).find(x=>x.slug===slug),name=meta?.name||slug.replace(/-/g,' ');
- if(exact.has(name.toLowerCase())||converters.test(name))return mountRealTool(slug);
- return mountIndividual(slug);
-}
+const MAX=30*1024*1024;
+function guard(){for(const input of document.querySelectorAll('#toolApp input[type=file]')){if(input.dataset.ztGuarded)return;input.dataset.ztGuarded='1';input.addEventListener('change',()=>{const bad=[...input.files].find(f=>f.size>MAX);if(bad){input.value='';const out=document.querySelector('#toolApp .output');if(out){out.className='output error';out.textContent='Image exceeds the 30MB browser safety limit. Use a smaller image or reduce its dimensions before processing.'}}},{passive:true})}}
+export async function mount(slug){let tools=window.ZT_TOOLS;if(!tools){const base=location.pathname.startsWith('/Zero-trust/')?'/Zero-trust/':'/';tools=await fetch(base+'data/tools-index.json',{cache:'force-cache'}).then(r=>r.json());window.ZT_TOOLS=tools}const meta=(tools||[]).find(x=>x.slug===slug),name=meta?.name||slug.replace(/-/g,' ');if(exact.has(name.toLowerCase())||converters.test(name))await mountRealTool(slug);else await mountIndividual(slug);guard()}

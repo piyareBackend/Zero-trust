@@ -1,0 +1,5 @@
+import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm';
+import { toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm';
+let instance;
+const get=async()=>{if(instance)return instance;const f=new FFmpeg();const root='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';await f.load({coreURL:await toBlobURL(`${root}/ffmpeg-core.js`,'text/javascript'),wasmURL:await toBlobURL(`${root}/ffmpeg-core.wasm`,'application/wasm')});instance=f;return f};
+self.onmessage=async e=>{const {id,inputName,input,outputName,args}=e.data;try{const f=await get();await f.writeFile(inputName,new Uint8Array(input));const code=await f.exec(args);if(code!==0)throw Error('FFmpeg conversion failed.');const data=await f.readFile(outputName);const result=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);await f.deleteFile(inputName).catch(()=>{});await f.deleteFile(outputName).catch(()=>{});self.postMessage({id,ok:true,result},[result])}catch(error){self.postMessage({id,ok:false,error:error.message||String(error)})}};
