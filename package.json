@@ -1,0 +1,19 @@
+{
+  "name": "zero-trust",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build-cloudflare.mjs",
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "build:pages": "node scripts/build-pages.mjs",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "deploy:ci": "wrangler deploy --config wrangler.ci.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
