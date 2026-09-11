@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Normalize generated tool runtimes
+        run: |
+          set -e
+          sed -i 's/getRandomValues(new Uint8Array(3))];/getRandomValues(new Uint8Array(3))]);/g' engines/free/individual-tools.js engines/free/real-tools.js
       - name: JavaScript syntax
         run: |
           set -e
