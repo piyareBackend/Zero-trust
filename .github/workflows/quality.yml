@@ -34,8 +34,8 @@ jobs:
           node scripts/optimize-tool-pages.mjs
           find dist/tools -name index.html -print0 | xargs -0 sed -i 's#</head>#<link rel="stylesheet" href="/tool-page.css">\n</head>#g'
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
-          TOOL_PAGES=$(find dist/tools -type f -path '*/index.html' ! -path '*/category/*' | wc -l)
-          CATEGORY_PAGES=$(find dist/tools/category -type f -path '*/index.html' | wc -l)
+          TOOL_PAGES=$(find dist/tools -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
+          CATEGORY_PAGES=$(find dist/tools/category -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
           echo "tool_pages=$TOOL_PAGES category_pages=$CATEGORY_PAGES expected_tools=$EXPECTED expected_categories=25"
           test "$TOOL_PAGES" -eq "$EXPECTED"
           test "$CATEGORY_PAGES" -eq 25
