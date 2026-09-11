@@ -4,9 +4,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+concurrency:
+  group: zero-trust-quality-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Normalize generated tool runtimes
@@ -37,19 +41,14 @@ jobs:
           EXPECTED_CATEGORIES=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(new Set(CATALOG.map(x=>x.category)).size)))" | tail -n 1)
           TOOL_PAGES=$(find dist/tools -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
           CATEGORY_PAGES=$(find dist/tools/category -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
-          echo "tool_pages=$TOOL_PAGES category_pages=$CATEGORY_PAGES expected_tools=$EXPECTED expected_categories=$EXPECTED_CATEGORIES"
-          test "$TOOL_PAGES" -eq "$EXPECTED"
-          test "$CATEGORY_PAGES" -eq "$EXPECTED_CATEGORIES"
+          test "$TOOL_PAGES" -eq "$EXPECTED"; test "$CATEGORY_PAGES" -eq "$EXPECTED_CATEGORIES"
       - name: Cloudflare artifact build verification
         run: |
           set -euo pipefail
           node scripts/build-cloudflare.mjs
-          test -f dist/index.html
-          test -f dist/tools/jpg-to-png-converter/index.html
-          test -f dist/tool-page.css
+          test -f dist/index.html; test -f dist/tool-page.css; test -f dist/tools/jpg-to-png-converter/index.html
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
           TOOL_PAGES=$(find dist/tools -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
-          echo "cloudflare_tool_pages=$TOOL_PAGES expected_tools=$EXPECTED"
           test "$TOOL_PAGES" -eq "$EXPECTED"
       - name: Static page integrity
         run: |
@@ -67,6 +66,7 @@ jobs:
       - name: Security regression
         run: node tests/security-static.mjs
       - name: API account and entitlement smoke
+        timeout-minutes: 5
         run: |
           npm install --no-save --no-package-lock wrangler@latest
           npx --yes wrangler@latest d1 execute zero-trust-ci --local --file=api/schema.sql --config=wrangler.ci.jsonc
@@ -75,6 +75,7 @@ jobs:
           for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then break; fi; if [ "$i" = 30 ]; then cat /tmp/zt-worker.log; exit 1; fi; sleep 1; done
           timeout 120s env API_BASE=http://127.0.0.1:8787 TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" node tests/api-smoke.mjs
       - name: Complete 1,594-tool action regression
+        timeout-minutes: 15
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright@1.55.0 install --with-deps chromium
@@ -82,6 +83,7 @@ jobs:
           from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
           ThreadingHTTPServer(('127.0.0.1',4173),SimpleHTTPRequestHandler).serve_forever()
           PY
-          (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) & SERVER_PID=$!; trap 'kill $SERVER_PID' EXIT
-          BASE_URL=http://127.0.0.1:4173 node tests/tool-regression.mjs
-          SITE_ROOT=dist node tests/smoke.mjs; SITE_ROOT=dist node tests/legacy-smoke.mjs
+          (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          BASE_URL=http://127.0.0.1:4173 REGRESSION_WORKERS=12 timeout 14m node tests/tool-regression.mjs
+          SITE_ROOT=dist timeout 60s node tests/smoke.mjs
+          SITE_ROOT=dist timeout 60s node tests/legacy-smoke.mjs
