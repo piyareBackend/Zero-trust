@@ -11,11 +11,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: JavaScript syntax
         run: |
-          node --check app.js; node --check account.js; node --check tool-engine.js; node --check api/worker.mjs; node --check api/platform-router.mjs; node --check api/main.mjs
-          node --check scripts/build-pages.mjs; node --check scripts/build-cloudflare.mjs; node --check scripts/enhance-platform.mjs; node --check scripts/merge-legacy-pages.mjs; node --check scripts/audit-tools.mjs; node --check scripts/build-capability-matrix.mjs; node --check scripts/optimize-tool-pages.mjs
-          node --check tests/legacy-smoke.mjs; node --check tests/security-static.mjs; node --check tests/api-smoke.mjs; node --check tests/tool-regression.mjs; node --check tests/page-quality.mjs
-          node --check engines/free/universal.js; node --check engines/free/extended.js; node --check engines/free/real-tools.js; node --check engines/free/strict-image.js; node --check engines/free/social-tools.js; node --check engines/free/strict-pdf.js; node --check engines/free/pdf-safe.js; node --check engines/free/document-converter.js
-          node --check data/catalog.mjs; node --check data/catalog-combined.mjs; node --check data/legacy-tools.mjs; node --check data/legacy-500-plus.mjs
+          set -e
+          find . -type f \( -name '*.js' -o -name '*.mjs' \) -not -path './node_modules/*' -print0 | while IFS= read -r -d '' f; do node --check "$f"; done
       - name: Catalog integrity
         run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length!==1594||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
       - name: Tool capability audit
@@ -26,13 +23,15 @@ jobs:
           node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('reports/tool-capability-matrix.json','utf8')); if(x.total!==1594||x.tools.length!==1594) process.exit(1); const allowed=new Set(['REAL_LOCAL','REAL_EXTERNAL','PARTIAL','UNSUPPORTED','DISABLED']); if(x.tools.some(t=>!allowed.has(t.status))) process.exit(1); console.log(JSON.stringify(x.counts,null,2));"
       - name: Build complete static site
         run: |
+          set -e
           rm -rf dist; OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
           cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _headers _redirects dist/; cp -r engines assets dist/
           SITE_BASE=/ node scripts/merge-legacy-pages.mjs; OUT_DIR=dist SITE_BASE=/ node scripts/enhance-platform.mjs
           node scripts/optimize-tool-pages.mjs
           find dist/tools -name index.html -print0 | xargs -0 sed -i 's#</head>#<link rel="stylesheet" href="/tool-page.css">\n</head>#g'
           EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
-          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"; test "$(find dist/tools/category -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq 25
+          test "$(find dist/tools -mindepth 2 -maxdepth 2 -name index.html | wc -l)" -eq "$EXPECTED"
+          test "$(find dist/tools/category -mindepth 3 -maxdepth 3 -name index.html | wc -l)" -eq 25
       - name: Static page integrity
         run: |
           test -f dist/index.html; test -f dist/tools/index.html; test -f dist/styles.css; test -f dist/tool-page.css; test -f dist/tools/jpg-to-png-converter/index.html; test -f dist/tools/pdf-page-counter/index.html
