@@ -14,7 +14,7 @@ const local={
  image:exact(['resize image (pixels)','compress jpg','compress png','compress webp','rotate image','flip image','add watermark to image','circle crop for profile picture','image border adder','image flip vertical/horizontal']),
  social:exact(['hashtag generator','instagram bio generator','youtube title/tag generator','caption generator','emoji picker/finder'])
 };
-const pdfImplemented=/^(merge pdf|split pdf|rotate pdf|crop pdf|add watermark to pdf|add page numbers to pdf|remove pdf password|add pdf password|reorder pdf pages|delete pdf pages|extract pdf pages|pdf to single images \(per page\)|edit pdf metadata|flatten pdf|grayscale pdf converter|scale\/resize pdf pages|pdf page counter|combine images into one pdf|pdf header\/footer editor|pdf to text \(ocr\)|reduce pdf file size)$/i;
+const pdfImplemented=/^(merge pdf|split pdf|rotate pdf|crop pdf|add watermark to pdf|add page numbers to pdf|reorder pdf pages|delete pdf pages|extract pdf pages|pdf to single images \(per page\)|edit pdf metadata|scale\/resize pdf pages|pdf page counter|combine images into one pdf|pdf header\/footer editor)$/i;
 const artifactEngines=new Set(['image','pdf','document','audio','video','qr']);
 function classify(t){
  const n=t.name.toLowerCase();
