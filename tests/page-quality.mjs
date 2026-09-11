@@ -1,9 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 const root=path.join(process.cwd(),'dist','tools');
-const files=[];const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.name==='index.html')files.push(p)}};walk(root);
-const toolFiles=files.filter(f=>!f.includes(`${path.sep}category${path.sep}`));
+const files=[];
+const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.name==='index.html')files.push(p)}};
+walk(root);
+// Only real tool routes count here. The directory landing page (tools/index.html)
+// is intentionally outside this depth-2 route shape, while category pages live
+// under tools/category/<slug>/ and are explicitly excluded.
+const toolFiles=files.filter(f=>{
+  const rel=path.relative(root,f).split(path.sep);
+  return rel.length===2 && rel[1]==='index.html';
+});
 if(toolFiles.length!==1594)throw new Error(`Expected 1594 tool pages, found ${toolFiles.length}`);
 const titles=new Map(),descs=new Map();let failures=[];
-for(const f of toolFiles){const h=fs.readFileSync(f,'utf8');const title=(h.match(/<title>([\s\S]*?)<\/title>/i)||[])[1]||'';const desc=(h.match(/<meta name="description" content="([\s\S]*?)">/i)||[])[1]||'';const canonical=(h.match(/<link rel="canonical" href="([\s\S]*?)">/i)||[])[1]||'';const checks=[['title',title.length>=20&&title.length<=140],['description',desc.length>=70&&desc.length<=260],['canonical',canonical.startsWith('/')],['schema',h.includes('applicationCategory')],['answer',h.includes('Quick answer')],['toolApp',h.includes('id="toolApp"')],['lazy-engine',h.includes('IntersectionObserver')===false]];for(const [k,ok] of checks)if(!ok&&k!=='lazy-engine')failures.push(`${path.relative(root,f)}: ${k}`);titles.set(title,(titles.get(title)||0)+1);descs.set(desc,(descs.get(desc)||0)+1)}
-const dupTitles=[...titles].filter(([,n])=>n>1),dupDescs=[...descs].filter(([,n])=>n>1);if(dupTitles.length||dupDescs.length)failures.push(`duplicate titles=${dupTitles.length} descriptions=${dupDescs.length}`);if(failures.length)throw new Error(`Page quality failures (${failures.length})\n${failures.slice(0,30).join('\n')}`);console.log(`Page quality PASS: ${toolFiles.length} unique tool pages with unique title/description, canonical, schema, AEO answer block, and runtime mount.`);
+for(const f of toolFiles){
+  const h=fs.readFileSync(f,'utf8');
+  const title=(h.match(/<title>([\s\S]*?)<\/title>/i)||[])[1]||'';
+  const desc=(h.match(/<meta name="description" content="([\s\S]*?)">/i)||[])[1]||'';
+  const canonical=(h.match(/<link rel="canonical" href="([\s\S]*?)">/i)||[])[1]||'';
+  const checks=[['title',title.length>=20&&title.length<=140],['description',desc.length>=70&&desc.length<=260],['canonical',canonical.startsWith('/')],['schema',h.includes('applicationCategory')],['answer',h.includes('Quick answer')],['toolApp',h.includes('id="toolApp"')],['lazy-engine',h.includes('IntersectionObserver')===false]];
+  for(const [k,ok] of checks)if(!ok&&k!=='lazy-engine')failures.push(`${path.relative(root,f)}: ${k}`);
+  titles.set(title,(titles.get(title)||0)+1);
+  descs.set(desc,(descs.get(desc)||0)+1);
+}
+const dupTitles=[...titles].filter(([,n])=>n>1),dupDescs=[...descs].filter(([,n])=>n>1);
+if(dupTitles.length||dupDescs.length)failures.push(`duplicate titles=${dupTitles.length} descriptions=${dupDescs.length}`);
+if(failures.length)throw new Error(`Page quality failures (${failures.length})\n${failures.slice(0,30).join('\n')}`);
+console.log(`Page quality PASS: ${toolFiles.length} unique tool pages with unique title/description, canonical, schema, AEO answer block, and runtime mount.`);
