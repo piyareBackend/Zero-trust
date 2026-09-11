@@ -84,6 +84,6 @@ jobs:
           ThreadingHTTPServer(('127.0.0.1',4173),SimpleHTTPRequestHandler).serve_forever()
           PY
           (cd dist && python3 /tmp/zt-server.py >/tmp/zt-server.log 2>&1) & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          BASE_URL=http://127.0.0.1:4173 REGRESSION_WORKERS=12 timeout 14m node tests/tool-regression.mjs
+          BASE_URL=http://127.0.0.1:4173 REGRESSION_WORKERS=16 timeout 14m node tests/tool-regression.mjs
           SITE_ROOT=dist timeout 60s node tests/smoke.mjs
           SITE_ROOT=dist timeout 60s node tests/legacy-smoke.mjs
