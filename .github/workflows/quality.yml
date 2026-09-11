@@ -13,7 +13,7 @@ jobs:
         run: |
           node --check app.js; node --check account.js; node --check tool-engine.js; node --check api/worker.mjs; node --check api/platform-router.mjs; node --check api/main.mjs
           node --check scripts/build-pages.mjs; node --check scripts/build-cloudflare.mjs; node --check scripts/enhance-platform.mjs; node --check scripts/merge-legacy-pages.mjs; node --check scripts/audit-tools.mjs; node --check scripts/build-capability-matrix.mjs; node --check scripts/optimize-tool-pages.mjs
-          node --check tests/legacy-smoke.mjs; node --check tests/security-static.mjs; node --check tests/api-smoke.mjs; node --check tests/tool-regression.mjs
+          node --check tests/legacy-smoke.mjs; node --check tests/security-static.mjs; node --check tests/api-smoke.mjs; node --check tests/tool-regression.mjs; node --check tests/page-quality.mjs
           node --check engines/free/universal.js; node --check engines/free/extended.js; node --check engines/free/real-tools.js; node --check engines/free/strict-image.js; node --check engines/free/social-tools.js; node --check engines/free/strict-pdf.js; node --check engines/free/pdf-safe.js; node --check engines/free/document-converter.js
           node --check data/catalog.mjs; node --check data/catalog-combined.mjs; node --check data/legacy-tools.mjs; node --check data/legacy-500-plus.mjs
       - name: Catalog integrity
@@ -38,6 +38,7 @@ jobs:
           test -f dist/index.html; test -f dist/tools/index.html; test -f dist/styles.css; test -f dist/tool-page.css; test -f dist/tools/jpg-to-png-converter/index.html; test -f dist/tools/pdf-page-counter/index.html
           test -f dist/login/index.html; test -f dist/signup/index.html; test -f dist/account/index.html; test -f dist/owner/index.html; test -f dist/pricing/index.html
           grep -q 'data-tool-slug="jpg-to-png-converter"' dist/tools/jpg-to-png-converter/index.html; grep -q 'Quick answer' dist/tools/pdf-page-counter/index.html; grep -q 'applicationCategory' dist/tools/jpg-to-png-converter/index.html; grep -q 'tool-page.css' dist/tools/jpg-to-png-converter/index.html; grep -q 'Quick tools' dist/index.html; grep -q 'hamburger' dist/index.html; grep -q 'Continue with Google' dist/login/index.html
+          node tests/page-quality.mjs
       - name: Security regression
         run: node tests/security-static.mjs
       - name: API account and entitlement smoke
