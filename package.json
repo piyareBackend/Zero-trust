@@ -10,7 +10,7 @@
     "build": "node scripts/build-cloudflare.mjs",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "build:pages": "node scripts/build-pages.mjs",
-    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "deploy": "npm run build && wrangler deploy --config wrangler.jsonc",
     "deploy:ci": "wrangler deploy --config wrangler.ci.jsonc"
   },
   "devDependencies": {
