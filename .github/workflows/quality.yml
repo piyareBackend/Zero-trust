@@ -87,3 +87,13 @@ jobs:
           BASE_URL=http://127.0.0.1:4173 REGRESSION_WORKERS=16 timeout 14m node tests/tool-regression.mjs
           SITE_ROOT=dist timeout 60s node tests/smoke.mjs
           SITE_ROOT=dist timeout 60s node tests/legacy-smoke.mjs
+      - name: Upload exhaustive regression ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zero-trust-regression-ledger-${{ github.run_id }}
+          path: |
+            reports/tool-regression.json
+            reports/tool-regression-failures.txt
+            reports/tool-capability-matrix.json
+          if-no-files-found: ignore
