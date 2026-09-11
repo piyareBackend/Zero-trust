@@ -40,6 +40,17 @@ jobs:
           echo "tool_pages=$TOOL_PAGES category_pages=$CATEGORY_PAGES expected_tools=$EXPECTED expected_categories=$EXPECTED_CATEGORIES"
           test "$TOOL_PAGES" -eq "$EXPECTED"
           test "$CATEGORY_PAGES" -eq "$EXPECTED_CATEGORIES"
+      - name: Cloudflare artifact build verification
+        run: |
+          set -euo pipefail
+          node scripts/build-cloudflare.mjs
+          test -f dist/index.html
+          test -f dist/tools/jpg-to-png-converter/index.html
+          test -f dist/tool-page.css
+          EXPECTED=$(node --input-type=module -e "import('./data/catalog-combined.mjs').then(({CATALOG})=>process.stdout.write(String(CATALOG.length)))" | tail -n 1)
+          TOOL_PAGES=$(find dist/tools -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
+          echo "cloudflare_tool_pages=$TOOL_PAGES expected_tools=$EXPECTED"
+          test "$TOOL_PAGES" -eq "$EXPECTED"
       - name: Static page integrity
         run: |
           set -euo pipefail
