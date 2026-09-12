@@ -42,7 +42,7 @@ jobs:
           set -e
           rm -rf dist
           OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/build-pages.mjs
-          cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _headers _redirects dist/
+          cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _redirects dist/
           cp -r engines assets dist/
           SITE_BASE=/Zero-trust/ node scripts/merge-legacy-pages.mjs
           OUT_DIR=dist SITE_BASE=/Zero-trust/ node scripts/enhance-platform.mjs
@@ -70,6 +70,16 @@ jobs:
           grep -q 'mobile-menu' dist/index.html
           grep -q 'Continue with Google' dist/login/index.html
           grep -q '/Zero-trust/tool-page.css' dist/tools/jpg-to-png-converter/index.html
+      - name: Verify Cloudflare asset bundle
+        if: env.CF_CONFIGURED == 'true'
+        run: |
+          set -euo pipefail
+          test ! -e dist/_headers
+          test ! -e dist/_redirects
+          test -f dist/.assetsignore
+          grep -qx '_headers' dist/.assetsignore
+          grep -qx '_redirects' dist/.assetsignore
+          echo 'Cloudflare asset bundle contains no Pages control files.'
       - name: Prepare Cloudflare Worker + existing production D1
         if: env.CF_CONFIGURED == 'true'
         run: |
@@ -83,6 +93,9 @@ jobs:
           if [ -n "$OWNER_EMAIL" ] && [ -n "$OWNER_BOOTSTRAP_SECRET" ]; then printf '%s' "$OWNER_EMAIL" | npx --yes wrangler@latest secret put OWNER_EMAIL --config=wrangler.jsonc; printf '%s' "$OWNER_BOOTSTRAP_SECRET" | npx --yes wrangler@latest secret put OWNER_BOOTSTRAP_SECRET --config=wrangler.jsonc; fi
           if [ -n "$GOOGLE_CLIENT_SECRET" ]; then printf '%s' "$GOOGLE_CLIENT_SECRET" | npx --yes wrangler@latest secret put GOOGLE_CLIENT_SECRET --config=wrangler.jsonc; fi
           if [ -n "$RESEND_API_KEY" ]; then printf '%s' "$RESEND_API_KEY" | npx --yes wrangler@latest secret put RESEND_API_KEY --config=wrangler.jsonc; fi
+      - name: Cloudflare deploy preflight
+        if: env.CF_CONFIGURED == 'true'
+        run: npx --yes wrangler@latest deploy --config=wrangler.jsonc --dry-run
       - name: Deploy Cloudflare Worker
         if: env.CF_CONFIGURED == 'true'
         run: npx --yes wrangler@latest deploy --config=wrangler.jsonc
