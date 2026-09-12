@@ -1,8 +1,4 @@
 /*
-  Security headers for the static deployment. COOP/COEP are required for isolated WebAssembly workers.
-  Keep the policy compatible with the lazily loaded, CORS-enabled local codecs.
-*/
-/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(self), microphone=(), geolocation=()
