@@ -33,7 +33,7 @@ jobs:
         run: |
           set -e
           rm -rf dist; OUT_DIR=dist SITE_BASE=/ node scripts/build-pages.mjs
-          cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _headers _redirects dist/; cp -r engines assets dist/
+          cp styles.css tool-page.css app.js tool-engine.js account.js account.css owner.js manifest.json sw.js 404.html _redirects dist/; cp -r engines assets dist/
           SITE_BASE=/ node scripts/merge-legacy-pages.mjs; OUT_DIR=dist SITE_BASE=/ node scripts/enhance-platform.mjs
           node scripts/optimize-tool-pages.mjs
           find dist/tools -name index.html -print0 | xargs -0 sed -i 's#</head>#<link rel="stylesheet" href="/tool-page.css">\n</head>#g'
