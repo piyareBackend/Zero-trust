@@ -17,10 +17,10 @@ const run = (script, env = {}) => {
 run('scripts/build-pages.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
 mkdirSync(dist, { recursive: true });
 
-// Cloudflare Workers serves the static artifact from dist/. Do not copy the
-// repository-level _headers file into the Worker asset bundle: security
-// headers are applied by api/main.mjs, which avoids Wrangler parsing a stale
-// or malformed _headers asset as part of Worker version creation.
+// Build a Worker-specific asset bundle. Pages-only control files are deliberately
+// excluded: Worker security headers are applied in api/main.mjs, and the Worker
+// itself normalizes the legacy /Zero-trust path. This prevents Cloudflare's
+// static-asset parser from consuming stale Pages metadata during deployment.
 for (const f of [
   'styles.css',
   'tool-page.css',
@@ -29,7 +29,6 @@ for (const f of [
   'manifest.json',
   'sw.js',
   '404.html',
-  '_redirects',
   'account.js',
   'account.css',
   'owner.js',
@@ -38,6 +37,10 @@ for (const f of [
 }
 cpSync(join(root, 'engines'), join(dist, 'engines'), { recursive: true });
 cpSync(join(root, 'assets'), join(dist, 'assets'), { recursive: true });
+
+// Defense in depth: if a future build step introduces Pages control files,
+// Wrangler must never upload or parse them as Worker static assets.
+writeFileSync(join(dist, '.assetsignore'), '_headers\n_redirects\n');
 
 run('scripts/merge-legacy-pages.mjs', { SITE_BASE: '/' });
 run('scripts/enhance-platform.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
