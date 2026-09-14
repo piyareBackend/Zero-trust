@@ -5,7 +5,7 @@ import { CATALOG } from '../data/catalog-combined.mjs';
 const root=process.cwd();
 const outputRoot=process.env.OUT_DIR?path.join(root,process.env.OUT_DIR):root;
 const tools=CATALOG;
-if(tools.length!==1594) throw new Error(`Combined catalog integrity failure: expected 1594 tools, found ${tools.length}`);
+if(tools.length!==1595) throw new Error(`Combined catalog integrity failure: expected 1595 tools, found ${tools.length}`);
 const categories=[...new Map(tools.map(t=>[t.category,{slug:t.category,name:t.categoryName,count:0}])).values()];
 for(const t of tools)categories.find(c=>c.slug===t.category).count++;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
