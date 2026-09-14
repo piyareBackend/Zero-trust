@@ -11,7 +11,8 @@ const toolFiles=files.filter(f=>{
   const rel=path.relative(root,f).split(path.sep);
   return rel.length===2 && rel[1]==='index.html';
 });
-if(toolFiles.length!==1594)throw new Error(`Expected 1594 tool pages, found ${toolFiles.length}`);
+const EXPECTED_TOOLS=1595;
+if(toolFiles.length!==EXPECTED_TOOLS)throw new Error(`Expected ${EXPECTED_TOOLS} tool pages, found ${toolFiles.length}`);
 const titles=new Map(),descs=new Map();let failures=[];
 for(const f of toolFiles){
   const h=fs.readFileSync(f,'utf8');
