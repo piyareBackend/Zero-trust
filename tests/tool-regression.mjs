@@ -10,7 +10,7 @@ const ACTION_TIMEOUT = 12000;
 const CONTEXT_BATCH = 40;
 const textFixture = Buffer.from('name,age\nAlice,12\nBob,13\n');
 const pngFixture = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
-const pdfFixture = Buffer.from('JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUi0gL0NvdW50IDEgPj4KZW5kb2Jq', 'base64');
+const pdfFixture = Buffer.from('JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUiBdIC9Db3VudCAxID4+CmVuZG9iagozIDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgMzAwIDE0NF0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gL0NvbnRlbnRzIDQgMCBSID4+CmVuZG9iago0IDAgb2JqCjw8IC9MZW5ndGggNDYgPj4Kc3RyZWFtCkJUIC9GMSAxMiBUZiAxMCAxMDAgVGQgKFplcm8gVHJ1c3QgVGVzdCkgVGo gRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAwIG4gCjAwMDAwMDAzMzcgMDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDA3CiUlRU9GCg=='.replace(/\s/g, ''), 'base64');
 const explicitUnavailable = /unavailable|disabled|not available|requires .*access|requires .*codec|requires .*provider|unsupported|not supported|intentionally/i;
 const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))]);
 
@@ -43,18 +43,17 @@ async function prepareInputs(page, meta) {
     await input.setInputFiles(p);
   }
   const ta = page.locator('#toolApp textarea').first();
-  if (await ta.count()) {
-    const value = /json/.test(n) ? '{"name":"Alice","age":12,"items":[1,2]}' : 'Hello world. 100 test input. #security #tools';
-    await ta.fill(value);
-  }
+  if (await ta.count()) await ta.fill(/json/.test(n) ? '{"name":"Alice","age":12,"items":[1,2]}' : 'Hello world. 100 test input. #security #tools');
   const nums = page.locator('#toolApp input[type=number]');
   for (let i = 0; i < await nums.count(); i++) await nums.nth(i).fill(i === 0 ? '100' : '10');
   const selects = page.locator('#toolApp select');
-  const selectCount = await selects.count();
-  for (let i = 0; i < selectCount; i++) {
+  for (let i = 0; i < await selects.count(); i++) {
     const options = selects.nth(i).locator('option');
     const count = await options.count();
-    if (count > 1) await selects.nth(i).selectOption(await options.nth(i === 1 ? 1 : 0).getAttribute('value'));
+    if (count > 1) {
+      const value = await options.nth(i === 1 ? 1 : 0).getAttribute('value');
+      if (value != null) await selects.nth(i).selectOption(value);
+    }
   }
 }
 
@@ -90,7 +89,7 @@ async function testTool(page, meta) {
       if (!out.trim() || /^Ready\.?$/.test(out.trim())) throw Error('Action produced no output.');
       semanticCheck(meta, out);
       return { kind: 'action', detail: out.slice(0, 300) };
-    }).catch(() => null);
+    });
     await button.click({ timeout: ACTION_TIMEOUT });
     const result = await withTimeout(Promise.race([downloadPromise, outputPromise]), TOOL_TIMEOUT, 'tool action');
     if (!result) throw Error('Action produced no output.');
@@ -121,7 +120,7 @@ async function worker(workerId) {
   await reset();
   try {
     while (true) {
-      if (inBatch >= CONTEXT_BATCH || page.isClosed() || !browser.isConnected()) await reset();
+      if (inBatch >= CONTEXT_BATCH || page.isClosed()) await reset();
       const index = next++;
       if (index >= CATALOG.length) return;
       let result = await testTool(page, CATALOG[index]);
