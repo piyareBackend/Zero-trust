@@ -28,5 +28,5 @@ const rows=CATALOG.map(t=>{
 });
 const counts=rows.reduce((m,r)=>(m[r.status]=(m[r.status]||0)+1,m),{});
 console.log(JSON.stringify({total:rows.length,counts,unsupported:rows.filter(r=>r.status==='unsupported').map(r=>({slug:r.slug,name:r.name,engine:r.engine})),specialized:rows.filter(r=>r.status==='provider-or-specialized').map(r=>({slug:r.slug,name:r.name,engine:r.engine}))},null,2));
-if(CATALOG.length!==1594) throw new Error(`Expected 1594 unique routes, found ${CATALOG.length}`);
+if(CATALOG.length!==1595) throw new Error(`Expected 1595 unique routes, found ${CATALOG.length}`);
 if(rows.some(r=>PASS_THROUGH.test(r.reason))) throw new Error('Audit report contains pass-through marker');
