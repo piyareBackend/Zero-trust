@@ -22,13 +22,13 @@ jobs:
           set -e
           find . -type f \( -name '*.js' -o -name '*.mjs' \) -not -path './node_modules/*' -print0 | while IFS= read -r -d '' f; do node --check "$f"; done
       - name: Catalog integrity
-        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length!==1594||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
+        run: node --input-type=module -e "import { CATALOG,MODERN_TOOL_COUNT,LEGACY_TOOL_COUNT,LEGACY_NAMED_TOOL_COUNT,LEGACY_GENERATED_TOOL_COUNT } from './data/catalog-combined.mjs'; console.log('modern='+MODERN_TOOL_COUNT+' legacy='+LEGACY_TOOL_COUNT+' named='+LEGACY_NAMED_TOOL_COUNT+' generated='+LEGACY_GENERATED_TOOL_COUNT+' combined='+CATALOG.length); if(MODERN_TOOL_COUNT!==1009||LEGACY_TOOL_COUNT!==600||LEGACY_NAMED_TOOL_COUNT!==200||LEGACY_GENERATED_TOOL_COUNT!==400||CATALOG.length!==1595||new Set(CATALOG.map(x=>x.slug)).size!==CATALOG.length) process.exit(1)"
       - name: Tool capability audit
         run: node scripts/audit-tools.mjs
       - name: Exhaustive capability matrix
         run: |
           node scripts/build-capability-matrix.mjs
-          node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('reports/tool-capability-matrix.json','utf8')); if(x.total!==1594||x.tools.length!==1594) process.exit(1); const allowed=new Set(['REAL_LOCAL','REAL_EXTERNAL','PARTIAL','UNSUPPORTED','DISABLED']); if(x.tools.some(t=>!allowed.has(t.status))) process.exit(1); console.log(JSON.stringify(x.counts,null,2));"
+          node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('reports/tool-capability-matrix.json','utf8')); if(x.total!==1595||x.tools.length!==1595) process.exit(1); const allowed=new Set(['REAL_LOCAL','REAL_EXTERNAL','PARTIAL','UNSUPPORTED','DISABLED']); if(x.tools.some(t=>!allowed.has(t.status))) process.exit(1); console.log(JSON.stringify(x.counts,null,2));"
       - name: Build complete static site
         run: |
           set -e
@@ -74,7 +74,7 @@ jobs:
           WORKER_PID=$!; trap 'kill $WORKER_PID 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then break; fi; if [ "$i" = 30 ]; then cat /tmp/zt-worker.log; exit 1; fi; sleep 1; done
           timeout 120s env API_BASE=http://127.0.0.1:8787 TEST_OWNER_EMAIL=owner-ci@example.invalid TEST_OWNER_PASSWORD="CiPass-${GITHUB_RUN_ID}-LongEnough" TEST_OWNER_BOOTSTRAP_SECRET="CiBootstrap-${GITHUB_RUN_ID}-LongEnough" TEST_USER_EMAIL=user-ci@example.invalid TEST_USER_PASSWORD="CiUser-${GITHUB_RUN_ID}-LongEnough" node tests/api-smoke.mjs
-      - name: Complete 1,594-tool action regression
+      - name: Complete 1,595-tool action regression
         timeout-minutes: 15
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
