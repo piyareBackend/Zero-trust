@@ -36,4 +36,4 @@ const matrix=CATALOG.map(t=>{const c=classify(t);return{id:t.slug,name:t.name,ca
 const counts=Object.fromEntries([...new Set(matrix.map(x=>x.status))].map(s=>[s,matrix.filter(x=>x.status===s).length]));
 fs.mkdirSync('reports',{recursive:true});fs.writeFileSync('reports/tool-capability-matrix.json',JSON.stringify({generatedAt:new Date().toISOString(),total:matrix.length,counts,tools:matrix},null,2)+'\n');
 console.log(JSON.stringify({total:matrix.length,counts},null,2));
-if(matrix.length!==1594)process.exit(1);
+if(matrix.length!==1595)process.exit(1);
