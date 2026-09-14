@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 import { CATALOG } from '../data/catalog-combined.mjs';
+
 const ROOT = process.env.BASE_URL || 'http://127.0.0.1:4173';
-// Keep browser/FFmpeg concurrency bounded so the exhaustive regression measures tools,
-// rather than exhausting the CI runner. Four isolated contexts still exercise the full catalog.
+// Reuse one context/page per worker. Creating 1,595 isolated Chromium contexts leaks
+// enough browser resources to crash the CI browser before the catalog is exhausted.
 const WORKERS = Math.max(2, Math.min(4, Number(process.env.REGRESSION_WORKERS || 4)));
 const TOOL_TIMEOUT = 15000;
 const PAGE_TIMEOUT = 8000;
@@ -13,9 +14,123 @@ const pngFixture = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA
 const pdfFixture = Buffer.from('%PDF-1.4\n%%EOF\n');
 const explicitUnavailable = /unavailable|disabled|not available|requires .*access|requires .*codec|requires .*provider|unsupported|not supported|intentionally/i;
 const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))]);
-function artifactCheck(buf, name) { if (!buf?.length) throw Error('Downloaded artifact is empty.'); const ext = name.toLowerCase().split('.').pop(); if (ext === 'png') { if (buf.length < 24 || buf.toString('ascii', 1, 4) !== 'PNG') throw Error('Downloaded artifact is not a PNG.'); if (buf.readUInt32BE(16) < 1 || buf.readUInt32BE(20) < 1) throw Error('PNG dimensions invalid.'); } if (ext === 'pdf' && buf.subarray(0, 5).toString() !== '%PDF-') throw Error('Artifact does not have a PDF signature.'); if (['txt','csv','md','html'].includes(ext) && !buf.toString('utf8').trim()) throw Error('Text artifact is empty.'); }
-function semanticCheck(meta, out) { const n = meta.name.toLowerCase(); if (n === 'word counter' && !/"words"\s*:\s*7/.test(out)) throw Error(`Word count semantic check failed: ${out}`); if (n === 'percentage calculator' && !/10(?:\.00)?/.test(out)) throw Error(`Percentage semantic check failed: ${out}`); }
-async function testTool(browser, meta) { const row = { slug: meta.slug, name: meta.name, engine: meta.engine, phase: meta.phase, status: 'fail', detail: '' }; const context = await browser.newContext({ acceptDownloads: true }); const page = await context.newPage(); page.setDefaultTimeout(PAGE_TIMEOUT); try { await withTimeout(page.goto(`${ROOT}/tools/${meta.slug}/`, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT }), TOOL_TIMEOUT, 'page load'); await page.waitForSelector('#toolApp', { timeout: PAGE_TIMEOUT }); await page.waitForFunction(() => document.querySelector('#toolApp')?.getAttribute('aria-busy') !== 'true', { timeout: PAGE_TIMEOUT }).catch(() => {}); const gate = page.locator('.pro-gate'); if (await gate.count()) { row.status = 'provider-gated'; row.detail = (await gate.innerText()).slice(0, 300); return row; } const input = page.locator('#toolApp input[type=file]').first(); if (await input.count()) { let p = { name: 'fixture.txt', mimeType: 'text/plain', buffer: textFixture }; if (meta.engine === 'image') p = { name: 'fixture.png', mimeType: 'image/png', buffer: pngFixture }; if (meta.engine === 'pdf') p = { name: 'fixture.pdf', mimeType: 'application/pdf', buffer: pdfFixture }; if (meta.engine === 'audio') p = { name: 'fixture.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFF') }; if (meta.engine === 'video') p = { name: 'fixture.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not-a-real-video') }; await input.setInputFiles(p); } const ta = page.locator('#toolApp textarea').first(); if (await ta.count()) await ta.fill('Hello world. 100 test input. #security #tools'); const nums = page.locator('#toolApp input[type=number]'); for (let i = 0; i < await nums.count(); i++) await nums.nth(i).fill(i === 0 ? '100' : '10'); const button = page.locator('#toolApp button').filter({ hasText: /run|process|convert|calculate|generate|check|create|decode|encode|scan|translate|test/i }).first(); if (!await button.count()) throw Error('No actionable control found.'); const before = (await page.locator('#toolApp .output').last().textContent().catch(() => '')) || ''; const dlPromise = page.waitForEvent('download', { timeout: ACTION_TIMEOUT }).catch(() => null); await button.click({ timeout: ACTION_TIMEOUT }); const result = await withTimeout((async () => { const dl = await dlPromise; if (dl) { const path = await dl.path(); if (!path) throw Error('Download started without an artifact path.'); const buf = fs.readFileSync(path); artifactCheck(buf, dl.suggestedFilename()); return { kind: 'artifact', detail: `artifact:${dl.suggestedFilename()} bytes:${buf.length}` }; } await page.waitForFunction(previous => { const values = [...document.querySelectorAll('#toolApp .output')].map(el => el.textContent?.trim() || ''); return values.some(value => value && value !== previous && value !== 'Ready.'); }, before, { timeout: ACTION_TIMEOUT }).catch(() => {}); const out = (await page.locator('#toolApp .output').last().textContent().catch(() => '')) || ''; if (explicitUnavailable.test(out)) throw Error(`Tool self-reported unavailable after action: ${out.slice(0, 300)}`); if (!out.trim() || /^Ready\.?$/.test(out.trim())) throw Error('Action produced no output.'); semanticCheck(meta, out); return { kind: 'action', detail: out.slice(0, 300) }; })(), TOOL_TIMEOUT, 'tool action'); row.status = result.kind === 'artifact' ? 'artifact-pass' : 'action-pass'; row.detail = result.detail; } catch (e) { row.detail = String(e?.message || e).slice(0, 500); } finally { await context.close().catch(() => {}); } return row; }
-const browser = await chromium.launch({ headless: true }); const results = new Array(CATALOG.length); let next = 0, completed = 0;
-async function worker() { while (true) { const index = next++; if (index >= CATALOG.length) return; results[index] = await testTool(browser, CATALOG[index]); completed++; if (completed % 50 === 0 || completed === CATALOG.length) console.log(`checked ${completed}/${CATALOG.length} with ${WORKERS} workers`); } }
-await Promise.all(Array.from({ length: WORKERS }, () => worker())); await browser.close(); const counts = results.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {}); const failures = results.filter(r => r.status === 'fail'); const report={total:results.length,workers:WORKERS,counts,failures};fs.mkdirSync('reports',{recursive:true});fs.writeFileSync('reports/tool-regression.json',JSON.stringify(report,null,2));fs.writeFileSync('reports/tool-regression-failures.txt',failures.map(x=>`${x.slug}\t${x.name}\t${x.engine}\t${x.detail}`).join('\n')); console.log(JSON.stringify({ total: results.length, workers: WORKERS, counts, failures: failures.slice(0, 200) }, null, 2)); if (results.length !== CATALOG.length) process.exit(2); if (failures.length) process.exit(1);
+
+function artifactCheck(buf, name) {
+  if (!buf?.length) throw Error('Downloaded artifact is empty.');
+  const ext = name.toLowerCase().split('.').pop();
+  if (ext === 'png') {
+    if (buf.length < 24 || buf.toString('ascii', 1, 4) !== 'PNG') throw Error('Downloaded artifact is not a PNG.');
+    if (buf.readUInt32BE(16) < 1 || buf.readUInt32BE(20) < 1) throw Error('PNG dimensions invalid.');
+  }
+  if (ext === 'pdf' && buf.subarray(0, 5).toString() !== '%PDF-') throw Error('Artifact does not have a PDF signature.');
+  if (['txt', 'csv', 'md', 'html'].includes(ext) && !buf.toString('utf8').trim()) throw Error('Text artifact is empty.');
+}
+
+function semanticCheck(meta, out) {
+  const n = meta.name.toLowerCase();
+  if (n === 'word counter' && !/"words"\s*:\s*7/.test(out)) throw Error(`Word count semantic check failed: ${out}`);
+  if (n === 'percentage calculator' && !/10(?:\.00)?/.test(out)) throw Error(`Percentage semantic check failed: ${out}`);
+}
+
+async function testTool(page, meta) {
+  const row = { slug: meta.slug, name: meta.name, engine: meta.engine, phase: meta.phase, status: 'fail', detail: '' };
+  try {
+    await withTimeout(page.goto(`${ROOT}/tools/${meta.slug}/`, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT }), TOOL_TIMEOUT, 'page load');
+    await page.waitForSelector('#toolApp', { timeout: PAGE_TIMEOUT });
+    await page.waitForFunction(() => document.querySelector('#toolApp')?.getAttribute('aria-busy') !== 'true', { timeout: PAGE_TIMEOUT }).catch(() => {});
+
+    const gate = page.locator('.pro-gate');
+    if (await gate.count()) {
+      row.status = 'provider-gated';
+      row.detail = (await gate.innerText()).slice(0, 300);
+      return row;
+    }
+
+    const input = page.locator('#toolApp input[type=file]').first();
+    if (await input.count()) {
+      let p = { name: 'fixture.txt', mimeType: 'text/plain', buffer: textFixture };
+      if (meta.engine === 'image') p = { name: 'fixture.png', mimeType: 'image/png', buffer: pngFixture };
+      if (meta.engine === 'pdf') p = { name: 'fixture.pdf', mimeType: 'application/pdf', buffer: pdfFixture };
+      if (meta.engine === 'audio') p = { name: 'fixture.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFF') };
+      if (meta.engine === 'video') p = { name: 'fixture.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not-a-real-video') };
+      await input.setInputFiles(p);
+    }
+
+    const ta = page.locator('#toolApp textarea').first();
+    if (await ta.count()) await ta.fill('Hello world. 100 test input. #security #tools');
+    const nums = page.locator('#toolApp input[type=number]');
+    for (let i = 0; i < await nums.count(); i++) await nums.nth(i).fill(i === 0 ? '100' : '10');
+
+    const button = page.locator('#toolApp button').filter({ hasText: /run|process|convert|calculate|generate|check|create|decode|encode|scan|translate|test/i }).first();
+    if (!await button.count()) throw Error('No actionable control found.');
+
+    const before = (await page.locator('#toolApp .output').last().textContent().catch(() => '')) || '';
+    const dlPromise = page.waitForEvent('download', { timeout: ACTION_TIMEOUT }).catch(() => null);
+    await button.click({ timeout: ACTION_TIMEOUT });
+    const result = await withTimeout((async () => {
+      const dl = await dlPromise;
+      if (dl) {
+        const path = await dl.path();
+        if (!path) throw Error('Download started without an artifact path.');
+        const buf = fs.readFileSync(path);
+        artifactCheck(buf, dl.suggestedFilename());
+        return { kind: 'artifact', detail: `artifact:${dl.suggestedFilename()} bytes:${buf.length}` };
+      }
+      await page.waitForFunction(previous => {
+        const values = [...document.querySelectorAll('#toolApp .output')].map(el => el.textContent?.trim() || '');
+        return values.some(value => value && value !== previous && value !== 'Ready.');
+      }, before, { timeout: ACTION_TIMEOUT }).catch(() => {});
+      const out = (await page.locator('#toolApp .output').last().textContent().catch(() => '')) || '';
+      if (explicitUnavailable.test(out)) throw Error(`Tool self-reported unavailable after action: ${out.slice(0, 300)}`);
+      if (!out.trim() || /^Ready\.?$/.test(out.trim())) throw Error('Action produced no output.');
+      semanticCheck(meta, out);
+      return { kind: 'action', detail: out.slice(0, 300) };
+    })(), TOOL_TIMEOUT, 'tool action');
+
+    row.status = result.kind === 'artifact' ? 'artifact-pass' : 'action-pass';
+    row.detail = result.detail;
+  } catch (e) {
+    row.detail = String(e?.message || e).slice(0, 500);
+  }
+  return row;
+}
+
+const browser = await chromium.launch({
+  headless: true,
+  args: ['--disable-gpu', '--disable-dev-shm-usage'],
+});
+const results = new Array(CATALOG.length);
+let next = 0;
+let completed = 0;
+
+async function worker(workerId) {
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+  page.setDefaultTimeout(PAGE_TIMEOUT);
+  try {
+    while (true) {
+      const index = next++;
+      if (index >= CATALOG.length) return;
+      results[index] = await testTool(page, CATALOG[index]);
+      completed++;
+      if (completed % 50 === 0 || completed === CATALOG.length) {
+        console.log(`checked ${completed}/${CATALOG.length} with ${WORKERS} workers (worker ${workerId})`);
+      }
+    }
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
+await Promise.all(Array.from({ length: WORKERS }, (_, i) => worker(i + 1)));
+await browser.close();
+
+const counts = results.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {});
+const failures = results.filter(r => r.status === 'fail');
+const report = { total: results.length, workers: WORKERS, counts, failures };
+fs.mkdirSync('reports', { recursive: true });
+fs.writeFileSync('reports/tool-regression.json', JSON.stringify(report, null, 2));
+fs.writeFileSync('reports/tool-regression-failures.txt', failures.map(x => `${x.slug}\t${x.name}\t${x.engine}\t${x.detail}`).join('\n'));
+console.log(JSON.stringify({ total: results.length, workers: WORKERS, counts, failures: failures.slice(0, 200) }, null, 2));
+if (results.length !== CATALOG.length) process.exit(2);
+if (failures.length) process.exit(1);
