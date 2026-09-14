@@ -1,37 +1,5 @@
 /* Zero Trust local inpainting worker. Media bytes are never uploaded. */
-self.onmessage = async ({data}) => {
-  try {
-    const {image, mask, width, height, mode='fast', feather=4, grain=15, color=50} = data;
-    self.postMessage({type:'progress', value:5});
-    if(mode==='ai') throw new Error('AI model asset is not bundled yet. Add /models/fastinpaint-int8.onnx; Fast mode is fully available now.');
-    importScripts('https://docs.opencv.org/4.x/opencv.js');
-    await waitForCV();
-    self.postMessage({type:'progress', value:25});
-    const rgba = new Uint8ClampedArray(image);
-    const m = new Uint8Array(mask);
-    const src = cv.matFromImageData(new ImageData(rgba, width, height));
-    const maskMat = new cv.Mat(height,width,cv.CV_8UC1);
-    for(let i=0;i<m.length;i+=4) maskMat.data[i/4]=m[i]>8?255:0;
-    if(feather>0){const k=Math.max(1,Math.floor(feather)*2+1);const kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));cv.GaussianBlur(maskMat,maskMat,new cv.Size(k,k),0);kernel.delete()}
-    self.postMessage({type:'progress', value:45});
-    const dst=new cv.Mat();
-    cv.inpaint(src,maskMat,dst,3,mode==='ns'?cv.INPAINT_NS:cv.INPAINT_TELEA);
-    self.postMessage({type:'progress', value:75});
-    const out=new ImageData(width,height);
-    dst.copyTo(cv.matFromImageData(out));
-    // Subtle deterministic grain only inside the mask; avoids external randomness and keeps output reproducible.
-    if(Number(grain)>0){
-      const amount=Math.min(1,Number(grain)/100)*7;
-      const d=out.data;
-      for(let y=0;y<height;y++) for(let x=0;x<width;x++){
-        const p=y*width+x, i=p*4; if(m[p*4]<8) continue;
-        const n=((p*1103515245+12345)>>>16)%17-8;
-        d[i]=Math.max(0,Math.min(255,d[i]+n*amount));d[i+1]=Math.max(0,Math.min(255,d[i+1]+n*amount));d[i+2]=Math.max(0,Math.min(255,d[i+2]+n*amount));
-      }
-    }
-    src.delete();maskMat.delete();dst.delete();
-    self.postMessage({type:'progress', value:95});
-    self.postMessage({type:'result', image:out.data.buffer}, [out.data.buffer]);
-  } catch (e) { self.postMessage({type:'error', message:e?.message||String(e)}); }
-};
-function waitForCV(){return new Promise((resolve,reject)=>{const start=Date.now();const t=()=>{if(self.cv?.Mat)return resolve();if(Date.now()-start>20000)return reject(new Error('OpenCV.js initialization timed out'));setTimeout(t,50)};t()})}
+const AI_MODEL='https://huggingface.co/g-ronimo/lama/resolve/main/lama_512_int8.onnx';
+self.onmessage=async({data})=>{try{const{image,mask,width,height,mode='fast',feather=4,grain=15}=data;self.postMessage({type:'progress',value:5});if(mode==='ai')return runAI(image,mask,width,height,grain);importScripts('https://docs.opencv.org/4.x/opencv.js');await waitForCV();self.postMessage({type:'progress',value:25});const rgba=new Uint8ClampedArray(image),m=new Uint8Array(mask),src=cv.matFromImageData(new ImageData(rgba,width,height)),maskMat=new cv.Mat(height,width,cv.CV_8UC1);for(let i=0;i<m.length;i+=4)maskMat.data[i/4]=m[i]>8?255:0;if(feather>0)cv.GaussianBlur(maskMat,maskMat,new cv.Size(Math.max(1,Math.floor(feather)*2+1),Math.max(1,Math.floor(feather)*2+1)),0);self.postMessage({type:'progress',value:45});const dst=new cv.Mat();cv.inpaint(src,maskMat,dst,3,mode==='ns'?cv.INPAINT_NS:cv.INPAINT_TELEA);const out=new ImageData(width,height),outMat=cv.matFromImageData(out);dst.copyTo(outMat);outMat.delete();self.postMessage({type:'progress',value:75});applyGrain(out,m,grain);src.delete();maskMat.delete();dst.delete();self.postMessage({type:'progress',value:95});self.postMessage({type:'result',image:out.data.buffer},[out.data.buffer])}catch(e){self.postMessage({type:'error',message:e?.message||String(e)})}};
+async function runAI(image,mask,width,height,grain){importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js');const ort=self.ort;if(!ort?.InferenceSession)throw Error('ONNX Runtime Web failed to load');if(ort.env?.wasm)ort.env.wasm.numThreads=Math.min(4,Math.max(1,self.navigator?.hardwareConcurrency||2));self.postMessage({type:'progress',value:18});const providers=[];if(self.navigator?.gpu)providers.push('webgpu');providers.push('wasm');const session=await ort.InferenceSession.create(AI_MODEL,{executionProviders:providers,graphOptimizationLevel:'all'});self.postMessage({type:'progress',value:35});const src=new Uint8ClampedArray(image),rawMask=new Uint8Array(mask),size=512,square=new OffscreenCanvas(size,size),sctx=square.getContext('2d',{willReadFrequently:true});sctx.putImageData(new ImageData(src,width,height),0,0);sctx.drawImage(square,0,0,width,height,0,0,size,size);const small=sctx.getImageData(0,0,size,size),plane=size*size,input=new Float32Array(4*plane);for(let y=0;y<size;y++)for(let x=0;x<size;x++){const i=y*size+x,si=i*4,sx=Math.min(width-1,Math.floor(x*width/size)),sy=Math.min(height-1,Math.floor(y*height/size)),mi=(sy*width+sx)*4,hole=rawMask[mi]>8?1:0;input[i]=small.data[si]/255*(1-hole);input[plane+i]=small.data[si+1]/255*(1-hole);input[2*plane+i]=small.data[si+2]/255*(1-hole);input[3*plane+i]=hole}const tensor=new ort.Tensor('float32',input,[1,4,size,size]),result=await session.run({input:tensor}),output=result.output||result[Object.keys(result)[0]],od=output.data;self.postMessage({type:'progress',value:75});const outSquare=new Uint8ClampedArray(size*size*4);for(let i=0;i<plane;i++){outSquare[i*4]=clamp(od[i]*255);outSquare[i*4+1]=clamp(od[plane+i]*255);outSquare[i*4+2]=clamp(od[2*plane+i]*255);outSquare[i*4+3]=255}const outCanvas=new OffscreenCanvas(width,height),octx=outCanvas.getContext('2d',{willReadFrequently:true});octx.drawImage(await createImageBitmap(new ImageData(outSquare,size,size)),0,0,width,height);const out=octx.getImageData(0,0,width,height);applyGrain(out,rawMask,grain);self.postMessage({type:'progress',value:95});self.postMessage({type:'result',image:out.data.buffer},[out.data.buffer])}
+function clamp(v){return Math.max(0,Math.min(255,Math.round(v)))}function applyGrain(out,m,grain){const amount=Math.min(1,Number(grain)/100)*7;if(!amount)return;for(let p=0;p<m.length/4;p++)if(m[p*4]>8){const n=((p*1103515245+12345)>>>16)%17-8,i=p*4;out.data[i]=clamp(out.data[i]+n*amount);out.data[i+1]=clamp(out.data[i+1]+n*amount);out.data[i+2]=clamp(out.data[i+2]+n*amount)}}function waitForCV(){return new Promise((resolve,reject)=>{const start=Date.now(),t=()=>{if(self.cv?.Mat)return resolve();if(Date.now()-start>20000)return reject(Error('OpenCV.js initialization timed out'));setTimeout(t,50)};t()})}
