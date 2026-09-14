@@ -1,0 +1,92 @@
+/* Zero Trust — Watermark Remover
+ * All media bytes stay in the browser. Workers receive ArrayBuffers/bitmaps only.
+ */
+const STYLE = `
+.wm-studio{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;margin-top:18px;color:#e5e7eb}.wm-main{min-width:0}.wm-toolbar,.wm-sidebar,.wm-video-bar{background:#0b0f19;border:1px solid #1e293b;border-radius:14px}.wm-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px}.wm-toolbar button,.wm-toolbar select,.wm-sidebar button,.wm-sidebar select,.wm-sidebar input{background:#111827;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:8px 10px}.wm-toolbar button:hover,.wm-sidebar button:hover{border-color:#38bdf8}.wm-toolbar .active,.wm-sidebar .active{border-color:#10b981;box-shadow:0 0 0 1px #10b981}.wm-stage{position:relative;min-height:460px;margin-top:12px;background:#050812;border:1px solid #1e293b;border-radius:14px;overflow:hidden;display:grid;place-items:center}.wm-stage canvas{max-width:100%;max-height:72vh;display:block;touch-action:none}.wm-drop{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;border:1px dashed #334155;pointer-events:none}.wm-drop.hidden{display:none}.wm-sidebar{padding:14px}.wm-sidebar h3{margin:0 0 12px;font-size:14px}.wm-group{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid #1e293b}.wm-group:last-child{border-bottom:0;margin-bottom:0}.wm-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#94a3b8;margin:8px 0 5px}.wm-sidebar input[type=range]{width:100%;padding:0}.wm-status{font-size:12px;color:#94a3b8;margin-top:10px}.wm-progress{height:5px;background:#111827;border-radius:999px;overflow:hidden;margin-top:8px}.wm-progress i{display:block;height:100%;width:0;background:#10b981;transition:width .15s}.wm-video-bar{padding:10px;margin-top:12px}.wm-video-bar input[type=range]{width:100%}.wm-video-controls{display:flex;align-items:center;gap:8px}.wm-video-controls span{font-variant-numeric:tabular-nums;font-size:12px;color:#94a3b8}.wm-privacy{font-size:11px;color:#6ee7b7;margin-top:8px}.wm-batch{max-height:150px;overflow:auto;font-size:12px;color:#94a3b8}.wm-compare{position:absolute;inset:0;pointer-events:none}.wm-compare canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.wm-compare input{position:absolute;bottom:14px;left:8%;width:84%;pointer-events:auto}.wm-video{display:none;max-width:100%;max-height:72vh}.wm-hint{color:#94a3b8;font-size:12px}.wm-error{color:#fca5a5}.wm-ok{color:#6ee7b7}@media(max-width:900px){.wm-studio{grid-template-columns:1fr}.wm-sidebar{order:2}.wm-stage{min-height:360px}}
+`;
+
+const CDN = {
+  cv: 'https://docs.opencv.org/4.x/opencv.js',
+  ort: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.mjs',
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = (root, sel) => root.querySelector(sel);
+
+function workerUrl(name){ return new URL(`/workers/${name}`, location.origin).href; }
+function blobUrl(blob){ return URL.createObjectURL(blob); }
+
+export async function mount(){
+  const app = document.querySelector('#toolApp'); if(!app) return;
+  const style=document.createElement('style'); style.textContent=STYLE; document.head.appendChild(style);
+  app.innerHTML = `
+    <div class="wm-studio" aria-label="Watermark remover studio">
+      <section class="wm-main">
+        <div class="wm-toolbar">
+          <input id="wmFile" type="file" accept="image/*,video/*" hidden>
+          <button id="wmOpen" class="active">Open media</button>
+          <button data-tool="brush">Smart Brush</button><button data-tool="box">Box</button><button data-tool="lasso">Lasso</button><button data-tool="wand">Magic Wand</button><button data-tool="erase">Eraser</button>
+          <select id="wmPreset"><option value="">Presets</option><option value="gemini">Gemini Sparkle / SynthID Badge</option><option value="tiktok">TikTok / Reels Bouncing Watermark</option><option value="dalle">DALL-E Multi-Color Bar</option><option value="stock">Stock Photo Tiled Grid</option><option value="date">Date & Timestamp Stamp</option></select>
+          <button id="wmZoomOut">−</button><button id="wmZoomReset">100%</button><button id="wmZoomIn">+</button>
+          <button id="wmRun" class="active">Remove watermark</button><button id="wmDownload">Export</button>
+        </div>
+        <div class="wm-stage" id="wmStage">
+          <canvas id="wmCanvas" width="960" height="540" aria-label="Masking canvas"></canvas>
+          <video id="wmVideo" class="wm-video" controls playsinline></video>
+          <div id="wmDrop" class="wm-drop"><div><strong>Drop an image or video here</strong><br><span class="wm-hint">Nothing is uploaded. Processing happens locally in this browser.</span></div></div>
+        </div>
+        <div class="wm-video-bar" id="wmVideoBar" hidden>
+          <div class="wm-video-controls"><button id="wmPlay">Play</button><span id="wmTime">00:00.000</span><span>·</span><span id="wmDuration">00:00.000</span></div>
+          <input id="wmTimeline" type="range" min="0" max="1" step="0.001" value="0">
+          <div class="wm-label"><span>Removal range</span><span id="wmRangeText">00:00 — end</span></div>
+          <div style="display:flex;gap:8px"><input id="wmStart" type="number" min="0" step="0.01" value="0" style="width:100%"><input id="wmEnd" type="number" min="0" step="0.01" value="0" style="width:100%"></div>
+        </div>
+      </section>
+      <aside class="wm-sidebar">
+        <div class="wm-group"><h3>Removal engine</h3><select id="wmMode" style="width:100%"><option value="fast">Fast — OpenCV Telea</option><option value="ns">Fast — Navier-Stokes</option><option value="ai">AI Neural — ONNX Runtime Web</option></select><div class="wm-hint">AI mode uses WebGPU when available, then WASM. No image bytes are sent to a server.</div></div>
+        <div class="wm-group"><h3>Mask precision</h3><div class="wm-label"><span>Brush size</span><b id="wmBrushVal">32px</b></div><input id="wmBrush" type="range" min="2" max="200" value="32"><div class="wm-label"><span>Hardness</span><b id="wmHardVal">80%</b></div><input id="wmHard" type="range" min="0" max="100" value="80"><div class="wm-label"><span>Feather</span><b id="wmFeatherVal">4px</b></div><input id="wmFeather" type="range" min="0" max="40" value="4"></div>
+        <div class="wm-group"><h3>Finishing</h3><div class="wm-label"><span>Grain matching</span><b id="wmGrainVal">15%</b></div><input id="wmGrain" type="range" min="0" max="100" value="15"><div class="wm-label"><span>Color balance</span><b id="wmColorVal">50%</b></div><input id="wmColor" type="range" min="0" max="100" value="50"></div>
+        <div class="wm-group"><h3>Video tracking</h3><button id="wmLock">Static Region Lock</button><button id="wmKeyframe">Add Keyframe A/B</button><div class="wm-hint">Static masks apply across the selected time range. Keyframes interpolate a rectangle between two positions.</div></div>
+        <div class="wm-group"><h3>Batch mode</h3><input id="wmBatch" type="file" accept="image/*" multiple><div class="wm-label"><span>Queue</span><b id="wmBatchCount">0 / 20</b></div><div id="wmBatchList" class="wm-batch"></div></div>
+        <div class="wm-group"><h3>Export</h3><select id="wmFormat" style="width:100%"><option value="png">PNG — lossless</option><option value="jpeg">JPG — quality 92</option><option value="webp">WEBP — quality 92</option></select><div class="wm-progress"><i id="wmProgress"></i></div><div id="wmStatus" class="wm-status">Ready.</div><div class="wm-privacy">LOCAL-FIRST · Media never leaves this browser.</div></div>
+      </aside>
+    </div>`;
+
+  const state={file:null,type:null,img:null,mask:null,zoom:1,tool:'brush',drag:false,last:null,video:null,start:0,end:0,box:null,keyframes:[],batch:[]};
+  const canvas=$ (app,'#wmCanvas'), ctx=canvas.getContext('2d'); const maskCanvas=document.createElement('canvas'); const mctx=maskCanvas.getContext('2d');
+  const status=t=>{$(app,'#wmStatus').textContent=t}; const progress=n=>{$(app,'#wmProgress').style.width=`${Math.max(0,Math.min(100,n))}%`};
+  const setLabels=()=>{for(const [id,suffix] of [['wmBrush','px'],['wmHard','%'],['wmFeather','px'],['wmGrain','%'],['wmColor','%']]){const el=$(app,'#'+id),out=$(app,'#'+id+'Val');if(out)out.textContent=el.value+suffix}};
+  for(const id of ['wmBrush','wmHard','wmFeather','wmGrain','wmColor']) $(app,'#'+id).addEventListener('input',setLabels); setLabels();
+
+  function resize(w,h){const max=1600; const scale=Math.min(1,max/Math.max(w,h)); canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));maskCanvas.width=canvas.width;maskCanvas.height=canvas.height;mctx.clearRect(0,0,canvas.width,canvas.height)}
+  function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);if(state.img)ctx.drawImage(state.img,0,0,canvas.width,canvas.height); if(state.mask){ctx.save();ctx.globalAlpha=.38;ctx.fillStyle='#10b981';ctx.drawImage(state.mask,0,0);ctx.restore()}}
+  function point(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height}}
+  function preset(name){if(!state.img&&!state.video)return;const w=canvas.width,h=canvas.height;mctx.clearRect(0,0,w,h);mctx.fillStyle='#fff';const box=(x,y,bw,bh)=>mctx.fillRect(x*w,y*h,bw*w,bh*h);if(name==='gemini'||name==='dalle')box(.70,.76,.25,.18);else if(name==='date')box(.02,.84,.32,.12);else if(name==='tiktok'){box(.02,.02,.28,.16);box(.70,.78,.28,.16)}else if(name==='stock'){mctx.globalAlpha=.42;for(let x=-.4;x<1.4;x+=.28)for(let y=-.3;y<1.4;y+=.28){mctx.save();mctx.translate(x*w,y*h);mctx.rotate(-.55);mctx.fillRect(0,0,.32*w,.07*h);mctx.restore()}mctx.globalAlpha=1}state.mask=mctx.getImageData(0,0,w,h);draw()}
+  function brush(e,erase=false){const p=point(e),radius=Number($(app,'#wmBrush').value);mctx.save();mctx.globalCompositeOperation=erase?'destination-out':'source-over';mctx.fillStyle='#fff';mctx.beginPath();mctx.arc(p.x,p.y,radius,0,Math.PI*2);mctx.fill();mctx.restore();state.mask=mctx.getImageData(0,0,canvas.width,canvas.height);draw()}
+  function boxMask(a,b,erase=false){const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);mctx.save();mctx.globalCompositeOperation=erase?'destination-out':'source-over';mctx.fillStyle='#fff';mctx.fillRect(x,y,w,h);mctx.restore();state.mask=mctx.getImageData(0,0,canvas.width,canvas.height);draw()}
+  canvas.addEventListener('pointerdown',e=>{if(!state.img)return;state.drag=true;state.last=point(e);canvas.setPointerCapture(e.pointerId);if(state.tool==='brush'||state.tool==='erase')brush(e,state.tool==='erase')});
+  canvas.addEventListener('pointermove',e=>{if(!state.drag)return;const p=point(e);if(state.tool==='brush'||state.tool==='erase'){const q=state.last;for(let t=0;t<=1;t+=.15)brush({clientX:(q.x+(p.x-q.x)*t)*canvas.getBoundingClientRect().width/canvas.width+canvas.getBoundingClientRect().left,clientY:(q.y+(p.y-q.y)*t)*canvas.getBoundingClientRect().height/canvas.height+canvas.getBoundingClientRect().top},state.tool==='erase')}state.last=p});
+  canvas.addEventListener('pointerup',e=>{if(!state.drag)return;const p=point(e);if(state.tool==='box')boxMask(state.last,p);state.drag=false});
+  canvas.addEventListener('wheel',e=>{e.preventDefault();state.zoom=Math.max(.25,Math.min(4,state.zoom+(e.deltaY<0?.1:-.1)));canvas.style.transform=`scale(${state.zoom})`},{passive:false});
+  app.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{state.tool=b.dataset.tool;app.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('active',x===b))});
+  $(app,'#wmPreset').onchange=e=>preset(e.target.value);
+  $(app,'#wmZoomIn').onclick=()=>{state.zoom=Math.min(4,state.zoom+.1);canvas.style.transform=`scale(${state.zoom})`};$(app,'#wmZoomOut').onclick=()=>{state.zoom=Math.max(.25,state.zoom-.1);canvas.style.transform=`scale(${state.zoom})`};$(app,'#wmZoomReset').onclick=()=>{state.zoom=1;canvas.style.transform='scale(1)'};
+
+  async function openFile(file){state.file=file;state.type=file.type.startsWith('video/')?'video':'image';$(app,'#wmDrop').classList.add('hidden');const url=blobUrl(file);try{if(state.type==='image'){const img=new Image();img.decoding='async';await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url});state.img=img;resize(img.naturalWidth,img.naturalHeight);draw()}else{const v=$(app,'#wmVideo');v.src=url;state.video=v;v.style.display='block';canvas.style.display='none';$(app,'#wmVideoBar').hidden=false;await new Promise(r=>v.onloadedmetadata=r);$(app,'#wmDuration').textContent=fmt(v.duration);$(app,'#wmEnd').value=v.duration;$(app,'#wmTimeline').max=v.duration;status(`Video ready · ${v.videoWidth}×${v.videoHeight} · ${v.duration.toFixed(2)}s`)}}catch(err){URL.revokeObjectURL(url);throw err}}
+  function fmt(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=s%60;return `${String(m).padStart(2,'0')}:${sec.toFixed(3).padStart(6,'0')}`}
+  $(app,'#wmOpen').onclick=()=>$(app,'#wmFile').click();$(app,'#wmFile').onchange=e=>e.target.files[0]&&openFile(e.target.files[0]).catch(err=>status('Open failed: '+err.message));
+  const stage=$(app,'#wmStage');stage.addEventListener('dragover',e=>e.preventDefault());stage.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)openFile(f).catch(err=>status('Open failed: '+err.message))});
+  $(app,'#wmTimeline').oninput=e=>{if(state.video)state.video.currentTime=Number(e.target.value)};state.video && (state.video.ontimeupdate=()=>{});$(app,'#wmPlay').onclick=()=>state.video?.paused?state.video.play():state.video?.pause();
+  $(app,'#wmStart').oninput=e=>state.start=Math.max(0,Number(e.target.value)||0);$(app,'#wmEnd').oninput=e=>state.end=Math.max(state.start,Number(e.target.value)||0);
+  $(app,'#wmLock').onclick=()=>{state.tool='box';status('Static Region Lock: draw the region on the media. It will be reused across the selected video range.')};
+  $(app,'#wmKeyframe').onclick=()=>{if(!state.box){state.box={x:.7,y:.75,w:.25,h:.15}};state.keyframes.push({t:state.video?.currentTime||0,...state.box});status(`Keyframe ${state.keyframes.length} saved at ${fmt(state.video?.currentTime||0)}`)};
+  $(app,'#wmBatch').onchange=e=>{state.batch=[...e.target.files].slice(0,20);$(app,'#wmBatchCount').textContent=`${state.batch.length} / 20`;$(app,'#wmBatchList').innerHTML=state.batch.map(f=>`<div>${esc(f.name)}</div>`).join('')};
+
+  async function loadOpenCV(){if(window.cv?.Mat)return window.cv;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=CDN.cv;s.onload=resolve;s.onerror=()=>reject(new Error('OpenCV.js could not be loaded'));document.head.appendChild(s)});return new Promise((resolve,reject)=>{const start=Date.now();const t=()=>{if(window.cv?.Mat)resolve(window.cv);else if(Date.now()-start>20000)reject(new Error('OpenCV.js initialization timed out'));else setTimeout(t,40)};t()})}
+  async function inpaint(imageData,maskData,mode){const worker=new Worker(workerUrl('inpainter.worker.js'),{type:'classic'});const payload={image:imageData.data.buffer.slice(0),mask:maskData.data.buffer.slice(0),width:imageData.width,height:imageData.height,mode,feather:Number($(app,'#wmFeather').value),grain:Number($(app,'#wmGrain').value),color:Number($(app,'#wmColor').value)};return new Promise((resolve,reject)=>{worker.onmessage=e=>{if(e.data.type==='progress')progress(e.data.value);if(e.data.type==='result'){worker.terminate();resolve(new ImageData(new Uint8ClampedArray(e.data.image),imageData.width,imageData.height))}if(e.data.type==='error'){worker.terminate();reject(new Error(e.data.message))}};worker.onerror=e=>{worker.terminate();reject(e.error||new Error('Inpainting worker failed'))};worker.postMessage(payload,[payload.image,payload.mask])})}
+  async function runImage(){if(!state.img){status('Open an image first.');return}state.mask ||= mctx.getImageData(0,0,canvas.width,canvas.height);progress(3);status('Processing locally…');const out=await inpaint(ctx.getImageData(0,0,canvas.width,canvas.height),state.mask,$(app,'#wmMode').value);ctx.putImageData(out,0,0);progress(100);status('Done · output remains in browser memory.')}
+  async function runVideo(){if(!state.video){status('Open a video first.');return}status('Rendering video in dedicated worker…');progress(2);const w=new Worker(workerUrl('videoRemover.worker.js'));const start=Number($(app,'#wmStart').value)||0,end=Number($(app,'#wmEnd').value)||state.video.duration;const mask=state.mask?new Uint8Array(state.mask.data):null;const data=await fetch(state.video.currentSrc).then(r=>r.arrayBuffer());return new Promise((resolve,reject)=>{w.onmessage=e=>{if(e.data.type==='progress'){progress(e.data.value);status(`Rendering ${e.data.value}%`)}else if(e.data.type==='result'){const u=URL.createObjectURL(new Blob([e.data.data],{type:'video/mp4'}));const a=document.createElement('a');a.href=u;a.download='zero-trust-watermark-removed.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);w.terminate();progress(100);status('Video exported locally.');resolve()}else if(e.data.type==='error'){w.terminate();reject(new Error(e.data.message))}};w.onerror=e=>{w.terminate();reject(e.error||new Error('Video worker failed'))};w.postMessage({data,start,end,mask:mask?.buffer||null,width:state.video.videoWidth,height:state.video.videoHeight,keyframes:state.keyframes},{transfer:[data,...(mask?[mask.buffer]:[])]})})}
+  $(app,'#wmRun').onclick=async()=>{try{if(state.type==='video')await runVideo();else await runImage()}catch(e){progress(0);status('Error: '+e.message)}};
+  $(app,'#wmDownload').onclick=()=>{if(!state.img){status('Process an image first.');return}const fmt=$(app,'#wmFormat').value;canvas.toBlob(b=>{if(!b)return;const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=`watermark-removed.${fmt==='jpeg'?'jpg':fmt}`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)},`image/${fmt}`,fmt==='png'?undefined:.92)};
+  $(app,'#wmMode').onchange=async e=>{if(e.target.value==='ai'){status('AI mode: ONNX Runtime Web will use WebGPU/WASM when a local model is available.');try{await import(CDN.ort)}catch{status('AI runtime unavailable; use Fast mode.')}}};
+  window.addEventListener('beforeunload',()=>{if(state.file){}if(state.video?.src?.startsWith('blob:'))URL.revokeObjectURL(state.video.src)});
+}
