@@ -4,7 +4,7 @@ import path from 'node:path';
 const dist=path.join(process.cwd(),'dist');
 const indexPath=path.join(dist,'data','tools-index.json');
 const tools=JSON.parse(fs.readFileSync(indexPath,'utf8'));
-if(!Array.isArray(tools)||tools.length!==1594) throw new Error(`Expected 1594 tools, found ${tools?.length}`);
+if(!Array.isArray(tools)||tools.length!==1595) throw new Error(`Expected 1595 tools, found ${tools?.length}`);
 const esc=s=>String(s??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 const SITE_BASE=(process.env.SITE_BASE||'/').replace(/\/$/,'')+'/';
 const abs=p=>`${SITE_BASE}${p}`.replace(/\/+/g,'/');
