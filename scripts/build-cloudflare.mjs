@@ -14,7 +14,7 @@ const run = (script, env = {}) => {
 run('scripts/build-pages.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
 mkdirSync(dist, { recursive: true });
 
-for (const f of ['styles.css','tool-page.css','app.js','tool-engine.js','manifest.json','sw.js','404.html','account.js','account.css','owner.js']) {
+for (const f of ['styles.css','motion-ui.css','tool-page.css','app.js','tool-engine.js','manifest.json','sw.js','404.html','account.js','account.css','owner.js']) {
   cpSync(join(root, f), join(dist, f));
 }
 cpSync(join(root, 'engines'), join(dist, 'engines'), { recursive: true });
@@ -26,6 +26,7 @@ writeFileSync(join(dist, '.assetsignore'), '_headers\n_redirects\n');
 run('scripts/merge-legacy-pages.mjs', { SITE_BASE: '/' });
 run('scripts/enhance-platform.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
 run('scripts/optimize-tool-pages.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
+run('scripts/inject-motion-ui.mjs', { OUT_DIR: 'dist' });
 
 const toolRoot = join(dist, 'tools');
 const addToolStyles = (dir) => {
