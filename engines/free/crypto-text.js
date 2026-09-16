@@ -1,0 +1,13 @@
+const enc=new TextEncoder(),dec=new TextDecoder();
+export const base64Encode=s=>{const b=enc.encode(String(s));let x='';for(let i=0;i<b.length;i+=0x8000)x+=String.fromCharCode(...b.subarray(i,i+0x8000));return btoa(x)};
+export const base64Decode=s=>{const x=atob(String(s).replace(/\s+/g,'')),b=Uint8Array.from(x,c=>c.charCodeAt(0));return dec.decode(b)};
+export const hex=bytes=>[...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+export const digest=async(algo,s)=>hex(await crypto.subtle.digest(algo,enc.encode(String(s))));
+export const sha256=s=>digest('SHA-256',s);
+export const sha512=s=>digest('SHA-512',s);
+export const sha1=s=>digest('SHA-1',s);
+export const formatJson=(s,compact=false)=>{const v=JSON.parse(String(s));return JSON.stringify(v,null,compact?0:2)};
+export const isJson=s=>{try{JSON.parse(String(s));return true}catch{return false}};
+export const urlEncode=s=>encodeURIComponent(String(s));
+export const urlDecode=s=>decodeURIComponent(String(s));
+export const randomPassword=(length=24,{upper=true,numbers=true,symbols=true}={})=>{const sets=['abcdefghijklmnopqrstuvwxyz'];if(upper)sets.push('ABCDEFGHIJKLMNOPQRSTUVWXYZ');if(numbers)sets.push('0123456789');if(symbols)sets.push('!@#$%^&*()-_=+[]{}:,.?');const chars=sets.join(''),a=new Uint32Array(length);crypto.getRandomValues(a);let out='';for(const n of a)out+=chars[n%chars.length];return out};
