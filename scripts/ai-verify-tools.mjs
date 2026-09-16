@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { chromium } from 'playwright';
 
-const BASE = process.env.AI_VERIFY_BASE_URL || 'https://zero-trust.sadab-notes-backup.workers.dev';
+const BASE = process.env.LIVE_URL || process.env.AI_VERIFY_BASE_URL || 'https://zero-trust.sadab-notes-backup.workers.dev';
 const samples = [
   ['Crypto','sha256-hash-generator', async p=>{const i=p.locator('input,textarea').first();await i.fill('hello');await p.locator('button,.btn').first().click();return /2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824/i.test(await p.locator('body').innerText())}],
   ['Crypto','base64-encode', async p=>{const i=p.locator('textarea,input').first();await i.fill('Hello');await p.locator('button,.btn').first().click();return (await p.locator('body').innerText()).includes('SGVsbG8=')}],
@@ -20,7 +20,7 @@ const samples = [
   ['Text & Data','word-count', async p=>{await p.locator('textarea,input').first().fill('one two three');return /3/.test(await p.locator('body').innerText())}],
   ['Color & Network','hex-to-rgb', async p=>{await p.locator('input').first().fill('#ff0000');await p.locator('button,.btn').first().click();return /255.*0.*0/.test(await p.locator('body').innerText())}],
   ['Color & Network','subnet-calculator', async p=>{await p.locator('input').first().fill('192.168.1.42');const ins=p.locator('input');if(await ins.count()>1)await ins.nth(1).fill('24');await p.locator('button,.btn').first().click();return /192\.168\.1\.0|broadcastIP|255\.255\.255\.0/.test(await p.locator('body').innerText())}],
-  ['Image & PDF','jpg-to-png', async p=>{return /choose|upload|image|convert/i.test(await p.locator('body').innerText())}],
+  ['Image & PDF','jpg-to-png-converter', async p=>{return /choose|upload|image|convert/i.test(await p.locator('body').innerText())}],
   ['Image & PDF','merge-pdf', async p=>{return /pdf|upload|choose|merge/i.test(await p.locator('body').innerText())}],
 ];
 
