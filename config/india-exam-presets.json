@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "note": "Application profiles are parameterized. Verify against the specific current recruitment/admission notice before submission because agencies can change requirements.",
+  "presets": {
+    "upsc-photo": {"exam":"UPSC","kind":"photo","widthPx":413,"heightPx":531,"dpi":200,"minKB":20,"maxKB":300,"aspect":0.7777778},
+    "upsc-signature": {"exam":"UPSC","kind":"signature","widthPx":350,"heightPx":200,"dpi":200,"minKB":10,"maxKB":100,"aspect":1.75},
+    "ssc-photo": {"exam":"SSC","kind":"photo","widthPx":413,"heightPx":531,"dpi":200,"minKB":20,"maxKB":50,"aspect":0.7777778},
+    "ssc-signature": {"exam":"SSC","kind":"signature","widthPx":350,"heightPx":200,"dpi":200,"minKB":10,"maxKB":20,"aspect":1.75},
+    "ibps-photo": {"exam":"IBPS","kind":"photo","widthPx":200,"heightPx":230,"dpi":200,"minKB":20,"maxKB":50,"aspect":0.8695652},
+    "ibps-signature": {"exam":"IBPS","kind":"signature","widthPx":140,"heightPx":60,"dpi":200,"minKB":10,"maxKB":20,"aspect":2.3333333},
+    "neet-photo": {"exam":"NEET","kind":"photo","widthPx":600,"heightPx":800,"dpi":200,"minKB":10,"maxKB":200,"aspect":0.75},
+    "neet-signature": {"exam":"NEET","kind":"signature","widthPx":300,"heightPx":100,"dpi":200,"minKB":4,"maxKB":30,"aspect":3},
+    "jee-photo": {"exam":"JEE","kind":"photo","widthPx":300,"heightPx":400,"dpi":200,"minKB":10,"maxKB":200,"aspect":0.75},
+    "jee-signature": {"exam":"JEE","kind":"signature","widthPx":300,"heightPx":100,"dpi":200,"minKB":4,"maxKB":30,"aspect":3},
+    "gate-photo": {"exam":"GATE","kind":"photo","widthPx":240,"heightPx":320,"dpi":200,"minKB":20,"maxKB":200,"aspect":0.75},
+    "gate-signature": {"exam":"GATE","kind":"signature","widthPx":160,"heightPx":80,"dpi":200,"minKB":10,"maxKB":100,"aspect":2},
+    "state-psc-photo": {"exam":"State PSC","kind":"photo","widthPx":413,"heightPx":531,"dpi":200,"minKB":20,"maxKB":300,"aspect":0.7777778},
+    "state-psc-signature": {"exam":"State PSC","kind":"signature","widthPx":350,"heightPx":200,"dpi":200,"minKB":10,"maxKB":100,"aspect":1.75}
+  }
+}
