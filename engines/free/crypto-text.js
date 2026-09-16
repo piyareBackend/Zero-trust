@@ -6,6 +6,7 @@ export const digest=async(algo,s)=>hex(await crypto.subtle.digest(algo,enc.encod
 export const sha256=s=>digest('SHA-256',s);
 export const sha512=s=>digest('SHA-512',s);
 export const sha1=s=>digest('SHA-1',s);
+export const md5=s=>{const b=enc.encode(String(s));const a=new Uint8Array(((b.length+9+63)>>6)<<6);a.set(b);a[b.length]=128;const dv=new DataView(a.buffer);dv.setUint32(a.length-8,b.length*8,true);dv.setUint32(a.length-4,Math.floor(b.length/0x20000000),true);let A=0x67452301,B=0xefcdab89,C=0x98badcfe,D=0x10325476;const rol=(x,n)=>(x<<n)|(x>>>(32-n));const K=Array.from({length:64},(_,i)=>Math.floor(Math.abs(Math.sin(i+1))*2**32)>>>0);const S=[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];for(let o=0;o<a.length;o+=64){const M=new Uint32Array(16);for(let i=0;i<16;i++)M[i]=dv.getUint32(o+i*4,true);let aa=A,bb=B,cc=C,dd=D;for(let i=0;i<64;i++){let f,g;if(i<16){f=(bb&cc)|((~bb)&dd);g=i}else if(i<32){f=(dd&bb)|((~dd)&cc);g=(5*i+1)%16}else if(i<48){f=bb^cc^dd;g=(3*i+5)%16}else{f=cc^(bb|(~dd));g=(7*i)%16}const t=aa+f+K[i]+M[g]>>>0,sh=S[(i>>4)*4+(i%4)];aa=dd;dd=cc;cc=bb;bb=(bb+rol(t,sh))>>>0}A=A+aa>>>0;B=B+bb>>>0;C=C+cc>>>0;D=D+dd>>>0}const r=new Uint8Array(16),v=new DataView(r.buffer);v.setUint32(0,A,true);v.setUint32(4,B,true);v.setUint32(8,C,true);v.setUint32(12,D,true);return hex(r)};
 export const formatJson=(s,compact=false)=>{const v=JSON.parse(String(s));return JSON.stringify(v,null,compact?0:2)};
 export const isJson=s=>{try{JSON.parse(String(s));return true}catch{return false}};
 export const urlEncode=s=>encodeURIComponent(String(s));
