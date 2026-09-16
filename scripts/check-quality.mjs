@@ -1,9 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync,readdirSync } from 'node:fs';
 import { CATALOG } from '../data/catalog-combined.mjs';
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{stdio:'inherit',shell:false});if(r.status!==0)process.exit(r.status??1)};
-for(const dir of ['api','engines','scripts','tests']){const walk=(p)=>{for(const e of readdirSync(p,{withFileTypes:true})){const q=`${p}/${e.name}`;if(e.isDirectory())walk(q);else if(/\.(js|mjs)$/u.test(e.name))run(process.execPath,['--check',q])}};walk(dir)}
+const walk=(p)=>{for(const e of readdirSync(p,{withFileTypes:true})){const q=`${p}/${e.name}`;if(e.isDirectory())walk(q);else if(/\.(js|mjs)$/u.test(e.name))run(process.execPath,['--check',q])}};
+for(const dir of ['api','engines','scripts','tests'])walk(dir);
 if(CATALOG.length!==1595||new Set(CATALOG.map(x=>x.slug)).size!==1595)throw Error(`Catalog integrity failure: ${CATALOG.length} routes`);
+run(process.execPath,['tests/family-engines.mjs']);
 run(process.execPath,['scripts/build-capability-matrix.mjs']);
 run(process.execPath,['scripts/build-pages.mjs']);
-console.log(`Quality preflight passed: ${CATALOG.length} unique tool routes.`);
+run(process.execPath,['scripts/build-cloudflare.mjs']);
+for(const p of ['dist/index.html','dist/tools/index.html','dist/tools/jpg-to-png-converter/index.html','dist/tools/pdf-merger/index.html','dist/config/india-exam-presets.json','dist/engines/free/family-router.js'])if(!existsSync(p))throw Error(`Missing build artifact: ${p}`);
+const pages=[];const collect=p=>{if(!existsSync(p))return;for(const e of readdirSync(p,{withFileTypes:true})){const q=`${p}/${e.name}`;if(e.isDirectory())collect(q);else if(e.name==='index.html'&&p.includes('/tools/'))pages.push(q)}};collect('dist');if(pages.length<1595)throw Error(`Tool page build incomplete: ${pages.length}/1595`);
+console.log(`Quality preflight passed: ${CATALOG.length} unique routes; ${pages.length} tool pages; shared family engines verified.`);
