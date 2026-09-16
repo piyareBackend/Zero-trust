@@ -27,6 +27,7 @@ run('scripts/merge-legacy-pages.mjs', { SITE_BASE: '/' });
 run('scripts/enhance-platform.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
 run('scripts/optimize-tool-pages.mjs', { OUT_DIR: 'dist', SITE_BASE: '/' });
 run('scripts/inject-motion-ui.mjs', { OUT_DIR: 'dist' });
+run('scripts/enhance-motion-cards.mjs', { OUT_DIR: 'dist' });
 
 const toolRoot = join(dist, 'tools');
 const addToolStyles = (dir) => {
@@ -37,4 +38,4 @@ const addToolStyles = (dir) => {
   }
 };
 for (const entry of readdirSync(toolRoot, { withFileTypes: true })) if (entry.isDirectory() && entry.name !== 'category') addToolStyles(entry.name);
-console.log('Cloudflare artifact ready in dist/ with the complete 1,595-tool catalog and local watermark studio.');
+console.log('Cloudflare artifact ready in dist/ with the complete 1,595-tool catalog and motion product-card UI.');
