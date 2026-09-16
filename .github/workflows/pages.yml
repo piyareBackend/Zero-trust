@@ -14,9 +14,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: https://piyarebackend.github.io/Zero-trust/
+    outputs:
+      cf_configured: ${{ steps.cf-state.outputs.configured }}
     env:
       CF_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -29,6 +32,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Record Cloudflare deployment state
+        id: cf-state
+        run: echo "configured=$CF_CONFIGURED" >> "$GITHUB_OUTPUT"
       - name: Normalize generated tool runtimes
         run: |
           set -e
@@ -114,7 +120,7 @@ jobs:
   live-smoke-verification:
     name: Live Smoke Verification
     needs: deploy
-    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+    if: ${{ needs.deploy.result == 'success' && needs.deploy.outputs.cf_configured == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -124,7 +130,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - name: Install project dependencies
         run: npm install
       - name: Install Playwright
